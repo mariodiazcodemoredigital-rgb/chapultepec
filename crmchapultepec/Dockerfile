@@ -1,4 +1,4 @@
-﻿# 1. Imagen base con el runtime de ASP.NET Core
+# 1. Imagen base con el runtime de ASP.NET Core
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 EXPOSE 8080
