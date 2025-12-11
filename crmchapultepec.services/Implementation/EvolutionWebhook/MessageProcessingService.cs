@@ -50,7 +50,8 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
             }
         }
 
-        private static string ComputeSha256Hex(string input)
+        // Reemplaza ProcessAsync por esta versión defensiva
+        private string ComputeSha256HexSafe(string input)
         {
             using var sha = System.Security.Cryptography.SHA256.Create();
             var bytes = Encoding.UTF8.GetBytes(input ?? "");
@@ -58,165 +59,273 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
             return Convert.ToHexString(hash).ToLowerInvariant();
         }
 
-
-        private async Task ProcessAsync(IncomingMessageDto dto, CancellationToken ct)
+        private async Task SaveDeadLetterFallbackAsync(string raw, string error, CancellationToken ct)
         {
-            // Protección temprana y logging detallado
-            _log.LogInformation("Processing incoming message ({threadId}) from {sender}", dto?.threadId, dto?.sender);
-            string raw = "{}";
-            try { raw = JsonSerializer.Serialize(dto); } catch { raw = "{}"; }
-
-            // calcular hash para idempotencia
-            var rawHash = ComputeSha256Hex(raw);
-
             try
             {
-                await using var db = await _dbFactory.CreateDbContextAsync(ct);
-
-                // Idempotencia: comprobar por RawHash y (si existe) ExternalId
-                bool exists = await db.CrmMessages
-                    .AsNoTracking()
-                    .AnyAsync(m => m.RawHash == rawHash
-                                   || (!string.IsNullOrEmpty(m.ExternalId) && m.ExternalId == (dto.threadId ?? "")), ct);
-
-                if (exists)
+                // Intentar guardar en archivo como fallback
+                var path = _cfg?["WebhookDebug:DeadLetterPath"] ?? "deadletters_fallback.log";
+                var entry = new
                 {
-                    _log.LogInformation("Duplicate message detected (rawHash) for thread {threadId}, skipping.", dto?.threadId);
-                    return;
-                }
-
-                // Validaciones mínimas: si dto o campos faltan -> guardar en dead-letters y salir
-                if (dto == null)
-                {
-                    _log.LogWarning("DTO null, saving to dead letters.");
-                    db.MessageDeadLetters.Add(new MessageDeadLetter { RawPayload = raw, Error = "dto_null", Source = "worker", OccurredUtc = DateTime.UtcNow });
-                    await db.SaveChangesAsync(ct);
-                    return;
-                }
-
-                if (string.IsNullOrWhiteSpace(dto.threadId) || string.IsNullOrWhiteSpace(dto.sender))
-                {
-                    _log.LogWarning("DTO missing required fields (threadId/sender). Storing in dead-letters.");
-                    db.MessageDeadLetters.Add(new MessageDeadLetter { RawPayload = raw, Error = "missing_thread_or_sender", Source = "worker", OccurredUtc = DateTime.UtcNow });
-                    await db.SaveChangesAsync(ct);
-                    return;
-                }
-
-                // Obtener o crear thread (usando threadId)
-                var thread = await db.CrmThreads.SingleOrDefaultAsync(t => t.ThreadId == dto.threadId, ct);
-                if (thread == null)
-                {
-                    thread = new CrmThread
-                    {
-                        ThreadId = dto.threadId,
-                        BusinessAccountId = dto.businessAccountId, // puede ser null, ok
-                        CreatedUtc = DateTime.UtcNow,
-                        LastMessageUtc = DateTimeOffset.FromUnixTimeSeconds(Math.Max(0, dto.timestamp)).UtcDateTime
-                    };
-                    db.CrmThreads.Add(thread);
-                    await db.SaveChangesAsync(ct); // salvo para obtener thread.Id
-                }
-                else
-                {
-                    // Actualizar LastMessageUtc si timestamp válido
-                    if (dto.timestamp > 0)
-                    {
-                        thread.LastMessageUtc = DateTimeOffset.FromUnixTimeSeconds(dto.timestamp).UtcDateTime;
-                        db.CrmThreads.Update(thread);
-                        await db.SaveChangesAsync(ct);
-                    }
-                }
-
-                // Crear mensaje (llenar con valores por defecto en caso de null)
-                var tsUtc = DateTime.UtcNow;
-                try
-                {
-                    if (dto.timestamp > 0)
-                        tsUtc = DateTimeOffset.FromUnixTimeSeconds(dto.timestamp).UtcDateTime;
-                }
-                catch { tsUtc = DateTime.UtcNow; }
-
-                var msgEntity = new CrmMessage
-                {
-                    ThreadRefId = thread.Id,
-                    Sender = dto.sender ?? "unknown",
-                    DisplayName = dto.displayName,
-                    Text = dto.text,
-                    TimestampUtc = tsUtc,
-                    DirectionIn = dto.directionIn,
-                    RawPayload = raw,
-                    RawHash = rawHash,
-                    ExternalId = null,
-                    CreatedUtc = DateTime.UtcNow
+                    OccurredUtc = DateTime.UtcNow,
+                    Error = error,
+                    Raw = TryParseJsonOrString(raw),
                 };
-
-                db.CrmMessages.Add(msgEntity);
-                await db.SaveChangesAsync(ct);
-
-                // PipelineHistory: usar dto.ai si existe, si no fallback
-                var pipelineName = dto.ai?.pipelineName ?? "Unassigned";
-                var stageName = dto.ai?.stageName ?? "Nuevos";
-                db.PipelineHistories.Add(new PipelineHistory
+                var line = JsonSerializer.Serialize(entry) + Environment.NewLine;
+                lock (typeof(MessageProcessingService))
                 {
-                    ThreadRefId = thread.Id,
-                    PipelineName = pipelineName,
-                    StageName = stageName,
-                    Source = dto.ai != null ? "webhook_ai" : "system",
-                    CreatedUtc = DateTime.UtcNow
-                });
-                await db.SaveChangesAsync(ct);
-
-                // SignalR notify: sólo si hay hub y businessAccountId para agrupar
-                try
-                {
-                    using var scope = _sp.CreateScope();
-                    var hubContext = scope.ServiceProvider.GetService<IHubContext<CrmHub>>();
-                    if (hubContext != null && !string.IsNullOrEmpty(dto.businessAccountId))
-                    {
-                        await hubContext.Clients.Group(dto.businessAccountId).SendAsync("NewMessage", new
-                        {
-                            ThreadId = thread.ThreadId,
-                            Sender = msgEntity.Sender,
-                            Text = msgEntity.Text,
-                            MessageId = msgEntity.Id
-                        }, ct);
-                    }
-                    else
-                    {
-                        _log.LogDebug("HubContext null or businessAccountId empty; skipping SignalR notify.");
-                    }
+                    File.AppendAllText(path, line, Encoding.UTF8);
                 }
-                catch (Exception exHub)
-                {
-                    // No queremos que un fallo de SignalR rompa el flujo
-                    _log.LogWarning(exHub, "SignalR notify failed for thread {threadId}", dto.threadId);
-                }
-
-                _log.LogInformation("Message {id} processed and saved (EF). ThreadId={threadId}, Sender={sender}", msgEntity.Id, thread.ThreadId, msgEntity.Sender);
+                _log.LogWarning("Saved dead-letter to file fallback: {path}", path);
             }
             catch (Exception ex)
             {
-                // En caso de error persistente, guardar en dead-letters con stacktrace y dto
-                _log.LogError(ex, "Error processing message ({threadId})", dto?.threadId);
-
-                try
-                {
-                    await using var db = await _dbFactory.CreateDbContextAsync(ct);
-                    db.MessageDeadLetters.Add(new MessageDeadLetter
-                    {
-                        RawPayload = raw,
-                        Error = ex.ToString(),
-                        Source = "worker",
-                        OccurredUtc = DateTime.UtcNow
-                    });
-                    await db.SaveChangesAsync(ct);
-                }
-                catch (Exception ex2)
-                {
-                    _log.LogError(ex2, "Failed to save dead-letter for message ({threadId})", dto?.threadId);
-                }
+                _log.LogError(ex, "Failed to write dead-letter to fallback file");
             }
         }
+
+        private object TryParseJsonOrString(string raw)
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<JsonElement>(raw);
+            }
+            catch
+            {
+                return raw;
+            }
+        }
+
+        private async Task ProcessAsync(IncomingMessageDto dto, CancellationToken ct)
+        {
+            // Log inicial con el DTO completo (para análisis)
+            string rawDto = "{}";
+            try
+            {
+                rawDto = JsonSerializer.Serialize(dto);
+            }
+            catch { rawDto = "{}"; }
+
+            _log.LogInformation("Processing incoming message ({threadId}) from {sender}. DTO: {dto}", dto?.threadId, dto?.sender, rawDto);
+
+            var rawHash = ComputeSha256HexSafe(rawDto);
+
+            // Intentamos usar DB; si falla, fallback a archivo
+            CrmInboxDbContext? db = null;
+            bool dbAvailable = true;
+            try
+            {
+                if (_dbFactory == null)
+                {
+                    _log.LogWarning("IDbContextFactory<CrmInboxDbContext> is null (DI issue)");
+                    dbAvailable = false;
+                }
+                else
+                {
+                    try
+                    {
+                        db = await _dbFactory.CreateDbContextAsync(ct);
+                        if (db == null)
+                        {
+                            _log.LogWarning("CreateDbContextAsync returned null");
+                            dbAvailable = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning(ex, "Failed to create DbContext from factory");
+                        dbAvailable = false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Unexpected error while checking db factory");
+                dbAvailable = false;
+            }
+
+            // Idempotencia check (if db available), otherwise rely on file fallback (we still continue)
+            try
+            {
+                if (dbAvailable && db != null)
+                {
+                    // check table existence defensively
+                    var canQueryDeadLetters = true;
+                    try
+                    {
+                        // Simple no-op query to ensure model has the DbSet
+                        _ = db.MessageDeadLetters != null;
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning(ex, "DbContext does not appear to have MessageDeadLetters DbSet configured");
+                        canQueryDeadLetters = false;
+                    }
+
+                    bool exists = false;
+                    try
+                    {
+                        exists = await db.CrmMessages.AsNoTracking().AnyAsync(m => m.RawHash == rawHash, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning(ex, "Error checking idempotency in DB; proceeding without DB idempotency check");
+                        exists = false;
+                    }
+
+                    if (exists)
+                    {
+                        _log.LogInformation("Duplicate message detected by rawHash; skipping. ThreadId={threadId}", dto?.threadId);
+                        return;
+                    }
+                }
+
+                // Validate dto minimally
+                if (dto == null)
+                {
+                    _log.LogWarning("Incoming dto is null -> saving dead-letter fallback");
+                    await SaveDeadLetterFallbackAsync(rawDto, "dto_null", ct);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(dto.threadId) || string.IsNullOrEmpty(dto.sender))
+                {
+                    _log.LogWarning("dto missing threadId or sender -> saving dead-letter fallback. DTO: {dto}", rawDto);
+                    await SaveDeadLetterFallbackAsync(rawDto, "missing_thread_or_sender", ct);
+                    return;
+                }
+
+                // If DB available, proceed to persist; otherwise fallback to file but still attempt best-effort (no throw)
+                if (dbAvailable && db != null)
+                {
+                    // Start transaction (short lived)
+                    using var tx = await db.Database.BeginTransactionAsync(ct);
+                    try
+                    {
+                        // Get or create thread
+                        var thread = await db.CrmThreads.SingleOrDefaultAsync(t => t.ThreadId == dto.threadId, ct);
+                        if (thread == null)
+                        {
+                            thread = new CrmThread
+                            {
+                                ThreadId = dto.threadId,
+                                BusinessAccountId = dto.businessAccountId,
+                                CreatedUtc = DateTime.UtcNow,
+                                LastMessageUtc = (dto.timestamp > 0) ? DateTimeOffset.FromUnixTimeSeconds(dto.timestamp).UtcDateTime : DateTime.UtcNow
+                            };
+                            db.CrmThreads.Add(thread);
+                            await db.SaveChangesAsync(ct);
+                        }
+                        else
+                        {
+                            if (dto.timestamp > 0) thread.LastMessageUtc = DateTimeOffset.FromUnixTimeSeconds(dto.timestamp).UtcDateTime;
+                            db.CrmThreads.Update(thread);
+                            await db.SaveChangesAsync(ct);
+                        }
+
+                        // Create message
+                        var tsUtc = DateTime.UtcNow;
+                        if (dto.timestamp > 0)
+                        {
+                            try { tsUtc = DateTimeOffset.FromUnixTimeSeconds(dto.timestamp).UtcDateTime; } catch { tsUtc = DateTime.UtcNow; }
+                        }
+
+                        var msgEntity = new CrmMessage
+                        {
+                            ThreadRefId = thread.Id,
+                            Sender = dto.sender ?? "unknown",
+                            DisplayName = dto.displayName,
+                            Text = dto.text,
+                            TimestampUtc = tsUtc,
+                            DirectionIn = dto.directionIn,
+                            RawPayload = rawDto,
+                            RawHash = rawHash,
+                            ExternalId = null,
+                            CreatedUtc = DateTime.UtcNow
+                        };
+
+                        db.CrmMessages.Add(msgEntity);
+                        await db.SaveChangesAsync(ct);
+
+                        // Pipeline history
+                        db.PipelineHistories.Add(new PipelineHistory
+                        {
+                            ThreadRefId = thread.Id,
+                            PipelineName = dto.ai?.pipelineName ?? "Unassigned",
+                            StageName = dto.ai?.stageName ?? "Nuevos",
+                            Source = dto.ai != null ? "webhook_ai" : "system",
+                            CreatedUtc = DateTime.UtcNow
+                        });
+                        await db.SaveChangesAsync(ct);
+
+                        await tx.CommitAsync(ct);
+
+                        // Notify SignalR safely
+                        try
+                        {
+                            using var scope = _sp.CreateScope();
+                            var hubContext = scope.ServiceProvider.GetService<IHubContext<CrmHub>>();
+                            if (hubContext != null && !string.IsNullOrEmpty(dto.businessAccountId))
+                            {
+                                await hubContext.Clients.Group(dto.businessAccountId)
+                                    .SendAsync("NewMessage", new { ThreadId = thread.ThreadId, Sender = msgEntity.Sender, Text = msgEntity.Text, MessageId = msgEntity.Id }, ct);
+                            }
+                        }
+                        catch (Exception exHub)
+                        {
+                            _log.LogWarning(exHub, "SignalR notify failed");
+                        }
+
+                        _log.LogInformation("Message processed and saved. MsgId={msgId} Thread={threadId}", msgEntity.Id, thread.ThreadId);
+                        return;
+                    }
+                    catch (Exception exDbOp)
+                    {
+                        _log.LogError(exDbOp, "Database operation failed while processing dto. Will try to save dead-letter to DB (if possible) or fallback file.");
+                        // try save dead-letter in DB if possible
+                        try
+                        {
+                            if (db.MessageDeadLetters != null)
+                            {
+                                db.MessageDeadLetters.Add(new MessageDeadLetter
+                                {
+                                    RawPayload = rawDto,
+                                    Error = exDbOp.ToString(),
+                                    Source = "worker",
+                                    Reviewed = false,
+                                    OccurredUtc = DateTime.UtcNow,
+                                    CreatedUtc = DateTime.UtcNow
+                                });
+                                await db.SaveChangesAsync(ct);
+                                _log.LogInformation("Saved dead-letter in DB after failure.");
+                                return;
+                            }
+                        }
+                        catch (Exception exDeadDb)
+                        {
+                            _log.LogWarning(exDeadDb, "Failed saving dead-letter in DB, falling back to file.");
+                        }
+
+                        // Fallback file
+                        await SaveDeadLetterFallbackAsync(rawDto, exDbOp.ToString(), ct);
+                        return;
+                    }
+                }
+                else
+                {
+                    // DB not available: fallback to file but still attempt to create a minimal record structure in file for later processing
+                    var fallbackError = "db_unavailable";
+                    await SaveDeadLetterFallbackAsync(rawDto, fallbackError, ct);
+                    return;
+                }
+            }
+            catch (Exception exTop)
+            {
+                _log.LogError(exTop, "Unhandled exception in ProcessAsync for dto {threadId}", dto?.threadId);
+                await SaveDeadLetterFallbackAsync(rawDto, exTop.ToString(), ct);
+            }
+        }
+
 
 
     }
