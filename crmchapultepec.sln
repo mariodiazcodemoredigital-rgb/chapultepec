@@ -1,13 +1,15 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36705.20 d17.14
+VisualStudioVersion = 17.14.36705.20
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "crmchapultepec", "crmchapultepec\crmchapultepec.csproj", "{FEDD80E1-633F-4307-83B4-9FDB887D0769}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "crmchapultepec.data", "crmchapultepec.data\crmchapultepec.data.csproj", "{02EB51F2-4512-4935-9ADD-7C0C26CFB9BA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "crmchapultepec.services", "crmchapultepec.services\crmchapultepec.services.csproj", "{CF7608AF-CB1A-45A0-9A1C-09E4832C94D9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "crmchapultepec.entities", "crmchapultepec.entities\crmchapultepec.entities.csproj", "{00FA43AD-4161-403C-9F0F-5D50431A31D5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,6 +29,10 @@ Global
 		{CF7608AF-CB1A-45A0-9A1C-09E4832C94D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CF7608AF-CB1A-45A0-9A1C-09E4832C94D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CF7608AF-CB1A-45A0-9A1C-09E4832C94D9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{00FA43AD-4161-403C-9F0F-5D50431A31D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00FA43AD-4161-403C-9F0F-5D50431A31D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00FA43AD-4161-403C-9F0F-5D50431A31D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00FA43AD-4161-403C-9F0F-5D50431A31D5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

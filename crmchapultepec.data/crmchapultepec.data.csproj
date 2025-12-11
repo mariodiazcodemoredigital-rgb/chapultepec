@@ -12,4 +12,12 @@
     <PackageReference Include="System.Linq.Dynamic.Core" Version="1.6.7" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\crmchapultepec.entities\crmchapultepec.entities.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Repositories\EvolutionWebhook\" />
+  </ItemGroup>
+
 </Project>
