@@ -12,6 +12,8 @@ COPY crmchapultepec.sln ./
 COPY crmchapultepec/*.csproj ./crmchapultepec/
 COPY crmchapultepec.data/*.csproj ./crmchapultepec.data/
 COPY crmchapultepec.services/*.csproj ./crmchapultepec.services/
+COPY crmchapultepec.entities/*.csproj ./crmchapultepec.entities/
+COPY crmchapultepec.entities/ ./crmchapultepec.entities/
 
 # Restaurar paquetes
 RUN dotnet restore
