@@ -16,6 +16,7 @@ namespace crmchapultepec.data.Data
         public DbSet<CrmMessage> CrmMessages { get; set; } = null!;
         public DbSet<PipelineHistory> PipelineHistories { get; set; } = null!;
         public DbSet<CrmContact> CrmContactDbs { get; set; } = null!;
+        public DbSet<MessageDeadLetter> MessageDeadLetters { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -45,6 +46,15 @@ namespace crmchapultepec.data.Data
                 .WithMany()
                 .HasForeignKey(ph => ph.ThreadRefId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<MessageDeadLetter>(b =>
+            {
+                b.HasKey(x => x.Id);
+                b.Property(x => x.RawPayload).IsRequired();
+                b.Property(x => x.OccurredUtc).HasDefaultValueSql("GETUTCDATE()");
+                b.Property(x => x.CreatedUtc).HasDefaultValueSql("GETUTCDATE()");
+                b.HasIndex(x => new { x.Reviewed, x.OccurredUtc }).HasDatabaseName("IX_MessageDeadLetter_Reviewed_Occurred");
+            });
         }
     }
 }

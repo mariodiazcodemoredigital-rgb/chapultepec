@@ -82,14 +82,23 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
             // 5) Parsear payload
             IncomingMessageDto? dto;
+            var mapped = MapEvolutionToIncoming(body);
             try
             {
-                dto = JsonSerializer.Deserialize<IncomingMessageDto>(body,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (dto == null)
+                //dto = JsonSerializer.Deserialize<IncomingMessageDto>(body,
+                //    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                //if (dto == null)
+                //{
+                //    _log.LogWarning("Webhook payload could not be parsed");
+                //    return BadRequest();
+                //}
+                
+                if (mapped == null)
                 {
-                    _log.LogWarning("Webhook payload could not be parsed");
-                    return BadRequest();
+                    // opcional: enqueue raw or return accepted_raw
+                    _log.LogWarning("Could not map evolution payload to DTO; enqueuing raw or saving dead letter.");
+                    // enqueue or handle accordingly
+                    return Ok(new { status = "accepted_raw" });
                 }
             }
             catch (Exception ex)
@@ -102,7 +111,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
             //    Encolar procesamiento y retornar 200 Accepted (o 200 OK)
             try
             {
-                await _queue.EnqueueAsync(dto);
+                await _queue.EnqueueAsync(mapped);
             }
             catch (Exception ex)
             {
@@ -114,6 +123,96 @@ namespace crmchapultepec.Components.EvolutionWebhook
             // Devolver 200 lo antes posible: Evolution espera status 200/2xx
             return Ok(new { status = "accepted" });
         }
+
+        // Método de mapeo (añádelo dentro del controller)
+        private IncomingMessageDto? MapEvolutionToIncoming(string rawBody)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(rawBody);
+                var root = doc.RootElement;
+
+                // Evolution trae el objeto bajo `data` (según tu log)
+                JsonElement dataElem;
+                if (root.TryGetProperty("data", out var d))
+                    dataElem = d;
+                else
+                    dataElem = root; // fallback (por si ya es el message)
+
+                // Buscar keys
+                string? remoteJid = null;
+                string? participant = null;
+                string? instance = null;
+                string? messageText = null;
+                long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                bool directionIn = true;
+                string? pushName = null;
+
+                if (dataElem.TryGetProperty("key", out var keyElem))
+                {
+                    if (keyElem.TryGetProperty("remoteJid", out var rj)) remoteJid = rj.GetString();
+                    if (keyElem.TryGetProperty("participant", out var p)) participant = p.GetString();
+                }
+
+                if (root.TryGetProperty("instance", out var inst)) instance = inst.GetString();
+                if (root.TryGetProperty("pushName", out var pn)) pushName = pn.GetString();
+
+                // mensaje: puede estar en data.message.conversation o data.message.extendedTextMessage.text, etc.
+                if (dataElem.TryGetProperty("message", out var msgElem))
+                {
+                    if (msgElem.TryGetProperty("conversation", out var conv))
+                        messageText = conv.GetString();
+                    else if (msgElem.TryGetProperty("extendedTextMessage", out var ext) && ext.TryGetProperty("text", out var extTxt))
+                        messageText = extTxt.GetString();
+                    else
+                    {
+                        // Buscar cualquier primer string value within message
+                        foreach (var prop in msgElem.EnumerateObject())
+                        {
+                            if (prop.Value.ValueKind == JsonValueKind.String)
+                            {
+                                messageText = prop.Value.GetString();
+                                break;
+                            }
+                        }
+                    }
+
+                    if (msgElem.TryGetProperty("timestamp", out var ts) && ts.TryGetInt64(out var tsv))
+                        timestamp = tsv;
+                }
+
+                // sender: en varios logs aparece "sender" separado del key.remoteJid
+                string? sender = null;
+                if (root.TryGetProperty("sender", out var s)) sender = s.GetString();
+                if (string.IsNullOrEmpty(sender) && !string.IsNullOrEmpty(remoteJid))
+                    sender = remoteJid;
+
+                // Build a threadId similar to how you used before, fallback to remoteJid
+                var threadId = $"{instance ?? "evolution"}:{/* businessAccountId? */ instance ?? "unknown"}:{remoteJid ?? sender ?? "unknown"}";
+
+                var incoming = new IncomingMessageDto(
+                    threadId: threadId,
+                    businessAccountId: instance ?? "evolution",
+                    sender: sender ?? remoteJid ?? "unknown",
+                    displayName: pushName ?? "",
+                    text: messageText ?? "",
+                    timestamp: timestamp,
+                    directionIn: true,
+                    ai: null,
+                    action: "initial",
+                    reason: "incoming_from_evolution",
+                    title: (pushName ?? sender)?.Split(' ').FirstOrDefault() ?? "Nuevo"
+                );
+
+                return incoming;
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Failed to map Evolution payload to IncomingMessageDto");
+                return null;
+            }
+        }
+
 
         // Helpers
         private static string ComputeHmacSha256(string secret, string payload)
