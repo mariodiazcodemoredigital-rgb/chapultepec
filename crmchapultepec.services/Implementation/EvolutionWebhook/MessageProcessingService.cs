@@ -26,12 +26,15 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
         private readonly IServiceProvider _sp;
         private readonly IDbContextFactory<CrmInboxDbContext> _dbFactory;
 
-        public MessageProcessingService(InMemoryMessageQueue queue, ILogger<MessageProcessingService> log, IConfiguration cfg, IServiceProvider sp)
+        public MessageProcessingService(InMemoryMessageQueue queue, 
+                                        ILogger<MessageProcessingService> log, 
+                                        IConfiguration cfg, IServiceProvider sp, IDbContextFactory<CrmInboxDbContext> dbFactory)
         {
             _queue = queue;
             _log = log;
             _cfg = cfg;
             _sp = sp;
+            _dbFactory = dbFactory;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
