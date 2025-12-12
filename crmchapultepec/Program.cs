@@ -2,6 +2,7 @@ using crmchapultepec.Components;
 using crmchapultepec.Components.Account;
 using crmchapultepec.data;
 using crmchapultepec.data.Data;
+using crmchapultepec.data.Repositories.EvolutionWebhook;
 using crmchapultepec.data.Repositories.Users;
 using crmchapultepec.services.Hubs;
 using crmchapultepec.services.Implementation.EvolutionWebhook;
@@ -51,6 +52,9 @@ builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 builder.Services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, CustomClaimsPrincipalFactory>();
 
+// Repositorio COMPARTIDO entre endpoint y componentes (YA USA SQL)
+builder.Services.AddSingleton<EvolutionWebhookRepository>();
+builder.Services.AddScoped<EvolutionWebhookService>();
 
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");

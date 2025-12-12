@@ -16,8 +16,4 @@
     <ProjectReference Include="..\crmchapultepec.entities\crmchapultepec.entities.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Repositories\EvolutionWebhook\" />
-  </ItemGroup>
-
 </Project>
