@@ -26,21 +26,21 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
         private readonly ILogger<MessageProcessingService> _log;
         private readonly IConfiguration _cfg;
         private readonly IServiceProvider _sp;
-        private readonly IEvolutionWebhookService _repo;
+   
 
 
         //private readonly IDbContextFactory<CrmInboxDbContext> _dbFactory;
 
         public MessageProcessingService(InMemoryMessageQueue queue, 
                                         ILogger<MessageProcessingService> log, 
-                                        IConfiguration cfg, IServiceProvider sp,
-                                        IEvolutionWebhookService repo)
+                                        IConfiguration cfg, IServiceProvider sp
+                                       )
         {
             _queue = queue;
             _log = log;
             _cfg = cfg;
             _sp = sp;
-            _repo = repo;
+          
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -114,6 +114,10 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
 
             var rawHash = ComputeSha256HexSafe(rawDto);
 
+            // Crear un scope para usar servicios scoped
+            using var scope = _sp.CreateScope();
+            var _repo = scope.ServiceProvider.GetRequiredService<IEvolutionWebhookService>();
+
             try
             {
                 // idempotency
@@ -160,8 +164,8 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
                 // SignalR notify
                 try
                 {
-                    using var scope = _sp.CreateScope();
-                    var hubContext = scope.ServiceProvider.GetService<IHubContext<CrmHub>>();
+                    using var scopeS = _sp.CreateScope();
+                    var hubContext = scopeS.ServiceProvider.GetService<IHubContext<CrmHub>>();
                     if (hubContext != null && !string.IsNullOrEmpty(dto.businessAccountId))
                     {
                         await hubContext.Clients.Group(dto.businessAccountId).SendAsync("NewMessage", new { ThreadId = dto.threadId, Sender = msgEntity.Sender, Text = msgEntity.Text, MessageId = messageId }, ct);

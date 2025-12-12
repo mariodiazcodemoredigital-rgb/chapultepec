@@ -17,10 +17,6 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Queue + Hosted Service
-builder.Services.AddSingleton<InMemoryMessageQueue>();
-builder.Services.AddSingleton<IMessageQueue>(sp => sp.GetRequiredService<InMemoryMessageQueue>());
-builder.Services.AddHostedService<MessageProcessingService>();
 
 // HttpClient para EvolutionClient
 //builder.Services.AddHttpClient<EvolutionClient>(client =>
@@ -53,8 +49,14 @@ builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuth
 builder.Services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, CustomClaimsPrincipalFactory>();
 
 // Repositorio COMPARTIDO entre endpoint y componentes (YA USA SQL)
-builder.Services.AddSingleton<EvolutionWebhookRepository>();
-builder.Services.AddScoped<EvolutionWebhookService>();
+builder.Services.AddScoped<EvolutionWebhookRepository>();
+builder.Services.AddScoped<IEvolutionWebhookService, EvolutionWebhookService>();
+
+
+// Queue + Hosted Service
+builder.Services.AddSingleton<InMemoryMessageQueue>();
+builder.Services.AddSingleton<IMessageQueue>(sp => sp.GetRequiredService<InMemoryMessageQueue>());
+builder.Services.AddHostedService<MessageProcessingService>();
 
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
