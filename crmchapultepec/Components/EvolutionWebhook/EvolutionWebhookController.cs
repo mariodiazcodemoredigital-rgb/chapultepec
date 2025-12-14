@@ -624,26 +624,36 @@ namespace crmchapultepec.Components.EvolutionWebhook
                             mediaMime = docu.GetProperty("mimetype").GetString();
                             mediaCaption = docu.TryGetProperty("title", out var title) ? title.GetString() : null;
 
-                            mediaKey = docu.GetProperty("mediaKey").GetString();
-                            fileSha256 = docu.GetProperty("fileSha256").GetString();
-                            fileEncSha256 = docu.GetProperty("fileEncSha256").GetString();
-                            directPath = docu.GetProperty("directPath").GetString();
+                            mediaKey = docu.TryGetProperty("mediaKey", out var mk) ? mk.GetString() : null;
+                            fileSha256 = docu.TryGetProperty("fileSha256", out var fsh) ? fsh.GetString() : null;
+                            fileEncSha256 = docu.TryGetProperty("fileEncSha256", out var feh) ? feh.GetString() : null;
+                            directPath = docu.TryGetProperty("directPath", out var dp) ? dp.GetString() : null;
 
-                            var tsElementTiem = data.GetProperty("mediaKeyTimestamp");
-                            mediaKeyTimestamp = ReadUnixTimestamp(tsElementTiem);
-
-                            //mediaKeyTimestamp = docu.TryGetProperty("mediaKeyTimestamp", out var mts)
-                            //    ? mts.GetInt64()
-                            //    : null;
+                            // 👇 ESTA ERA LA LÍNEA QUE TRONABA
+                            if (docu.TryGetProperty("mediaKeyTimestamp", out var mts))
+                                mediaKeyTimestamp = ReadUnixTimestamp(mts);
 
                             fileName = docu.TryGetProperty("fileName", out var fn) ? fn.GetString() : null;
-                            fileLength = docu.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : null;
-                            pageCount = docu.TryGetProperty("pageCount", out var pc) ? pc.GetInt32() : null;
+
+                            // 👇 fileLength VIENE COMO STRING
+                            if (docu.TryGetProperty("fileLength", out var fl))
+                            {
+                                if (fl.ValueKind == JsonValueKind.String && long.TryParse(fl.GetString(), out var len))
+                                    fileLength = len;
+                                else if (fl.ValueKind == JsonValueKind.Number)
+                                    fileLength = fl.GetInt64();
+                            }
+
+                            pageCount = docu.TryGetProperty("pageCount", out var pc) && pc.ValueKind == JsonValueKind.Number
+                                ? pc.GetInt32()
+                                : null;
+
                             thumbnailBase64 = docu.TryGetProperty("jpegThumbnail", out var jt) ? jt.GetString() : null;
 
                             textPreview = "[Documento]";
                             break;
                         }
+
 
 
                     case "stickerMessage":
