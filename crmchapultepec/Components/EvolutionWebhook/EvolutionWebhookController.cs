@@ -503,17 +503,34 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 // =========================
                 // Identidad base
                 // =========================
-                var instance = root.GetProperty("instance").GetString()!;
+                if (!root.TryGetProperty("instance", out var instProp))
+                    return null;
+
+                var instance = instProp.GetString()!;
+
                 var senderRoot = root.TryGetProperty("sender", out var s) ? s.GetString() : null;
 
-                var key = data.GetProperty("key");
-                var remoteJid = key.GetProperty("remoteJid").GetString()!;
-                var fromMe = key.GetProperty("fromMe").GetBoolean();
-                var externalMessageId = key.GetProperty("id").GetString();
+                // key
+                if (!data.TryGetProperty("key", out var key))
+                    return null;
 
-                var pushName = data.TryGetProperty("pushName", out var pn) ? pn.GetString() : null;
+                if (!key.TryGetProperty("remoteJid", out var rj))
+                    return null;
 
-                var tsElement = data.GetProperty("messageTimestamp");
+                var remoteJid = rj.GetString()!;
+
+                var fromMe = key.TryGetProperty("fromMe", out var fm) && fm.GetBoolean();
+                var externalMessageId = key.TryGetProperty("id", out var kid) ? kid.GetString() : null;
+
+                string? pushName = null;
+                if (data.TryGetProperty("pushName", out var pn))
+                    pushName = pn.GetString();
+
+
+                // timestamp (string o number)
+                if (!data.TryGetProperty("messageTimestamp", out var tsElement))
+                    return null;
+
                 var timestamp = ReadUnixTimestamp(tsElement);
 
                 //var timestamp = data.GetProperty("messageTimestamp").GetInt64();
@@ -530,8 +547,18 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 // =========================
                 // Mensaje
                 // =========================
-                var messageType = data.GetProperty("messageType").GetString() ?? "unknown";
-                var message = data.GetProperty("message");
+                // messageType (NO siempre viene)
+                var messageType =
+                    data.TryGetProperty("messageType", out var mt) ? mt.GetString() :
+                    data.TryGetProperty("type", out var t) ? t.GetString() :
+                    "unknown";
+
+                // message (NO siempre viene)
+                if (!data.TryGetProperty("message", out var message))
+                {
+                    _log.LogWarning("Payload without message node");
+                    return null;
+                }
 
                 string textPreview;
                 string? text = null;
