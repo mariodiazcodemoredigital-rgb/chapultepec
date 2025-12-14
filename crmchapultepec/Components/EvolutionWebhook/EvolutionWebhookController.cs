@@ -628,9 +628,13 @@ namespace crmchapultepec.Components.EvolutionWebhook
                             fileSha256 = docu.GetProperty("fileSha256").GetString();
                             fileEncSha256 = docu.GetProperty("fileEncSha256").GetString();
                             directPath = docu.GetProperty("directPath").GetString();
-                            mediaKeyTimestamp = docu.TryGetProperty("mediaKeyTimestamp", out var mts)
-                                ? mts.GetInt64()
-                                : null;
+
+                            var tsElementTiem = data.GetProperty("mediaKeyTimestamp");
+                            mediaKeyTimestamp = ReadUnixTimestamp(tsElementTiem);
+
+                            //mediaKeyTimestamp = docu.TryGetProperty("mediaKeyTimestamp", out var mts)
+                            //    ? mts.GetInt64()
+                            //    : null;
 
                             fileName = docu.TryGetProperty("fileName", out var fn) ? fn.GetString() : null;
                             fileLength = docu.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : null;
