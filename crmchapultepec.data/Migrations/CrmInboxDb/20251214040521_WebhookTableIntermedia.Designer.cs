@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using crmchapultepec.data.Data;
 
@@ -11,9 +12,11 @@ using crmchapultepec.data.Data;
 namespace crmchapultepec.data.Migrations.CrmInboxDb
 {
     [DbContext(typeof(CrmInboxDbContext))]
-    partial class CrmInboxDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251214040521_WebhookTableIntermedia")]
+    partial class WebhookTableIntermedia
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

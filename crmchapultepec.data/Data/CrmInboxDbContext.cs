@@ -1,4 +1,5 @@
 ﻿using crmchapultepec.entities.EvolutionWebhook;
+using crmchapultepec.entities.EvolutionWebhook.crmchapultepec.data.Entities.EvolutionWebhook;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -19,6 +20,7 @@ namespace crmchapultepec.data.Data
         public DbSet<MessageDeadLetter> MessageDeadLetters { get; set; } = null!;
 
         public DbSet<WebhookControl> WebhookControls => Set<WebhookControl>();
+        public DbSet<EvolutionRawPayload> EvolutionRawPayloads => Set<EvolutionRawPayload>();
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

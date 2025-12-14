@@ -1,7 +1,10 @@
-﻿using crmchapultepec.entities.EvolutionWebhook;
+﻿using crmchapultepec.data.Data;
+using crmchapultepec.entities.EvolutionWebhook;
+using crmchapultepec.entities.EvolutionWebhook.crmchapultepec.data.Entities.EvolutionWebhook;
 using crmchapultepec.services.Interfaces.EvolutionWebhook;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -87,6 +90,22 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 }
             }
 
+            // Paso Intermedio , mapear envelope
+            var envelope = MapEvolutionToEnvelope(body);
+
+            if (envelope == null)
+            {
+                _log.LogWarning("Evolution payload inválido, guardando RAW sin thread");
+                await SaveRawEvolutionPayloadAsync(body, "unknown", ct);
+                return Ok(new { status = "accepted_raw" });
+            }
+
+            // 🔹 Guardar RAW PAYLOAD (SIEMPRE)
+            await SaveRawEvolutionPayloadAsync(body, envelope.ThreadId, ct);
+
+
+
+
             // 5) Parsear payload
             IncomingMessageDto? dto;
             var mapped = MapEvolutionToIncoming(body);
@@ -124,6 +143,73 @@ namespace crmchapultepec.Components.EvolutionWebhook
         }
 
         // Método de mapeo (añádelo dentro del controller)
+        private IncomingEvolutionEnvelope? MapEvolutionToEnvelope(string rawBody)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(rawBody);
+                var root = doc.RootElement;
+
+                JsonElement dataElem = root.TryGetProperty("data", out var d) ? d : root;
+
+                string? remoteJid = null;
+                string? pushName = null;
+                string? messageText = null;
+                string? externalMessageId = null;
+                bool fromMe = false;
+                long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+                if (dataElem.TryGetProperty("key", out var key))
+                {
+                    if (key.TryGetProperty("remoteJid", out var rj)) remoteJid = rj.GetString();
+                    if (key.TryGetProperty("id", out var id)) externalMessageId = id.GetString();
+                    if (key.TryGetProperty("fromMe", out var fm)) fromMe = fm.GetBoolean();
+                }
+
+                if (root.TryGetProperty("pushName", out var pn))
+                    pushName = pn.GetString();
+
+                if (dataElem.TryGetProperty("messageTimestamp", out var ts) && ts.TryGetInt64(out var tsv))
+                    timestamp = tsv;
+
+                if (dataElem.TryGetProperty("message", out var msg))
+                {
+                    if (msg.TryGetProperty("conversation", out var c))
+                        messageText = c.GetString();
+                    else if (msg.TryGetProperty("extendedTextMessage", out var e) &&
+                             e.TryGetProperty("text", out var t))
+                        messageText = t.GetString();
+                }
+
+                var phone = remoteJid?
+                    .Replace("@s.whatsapp.net", "")
+                    .Replace("@lid", "");
+
+                var threadId = $"wa:{phone}";
+
+                return new IncomingEvolutionEnvelope
+                {
+                    ThreadId = threadId,
+                    BusinessAccountId = root.GetProperty("instance").GetString() ?? "evolution",
+                    CustomerPhone = phone,
+                    CustomerDisplayName = pushName,
+                    CustomerPlatformId = remoteJid,
+                    Text = messageText,
+                    LastMessagePreview = messageText?.Length > 200 ? messageText[..200] : messageText,
+                    DirectionIn = !fromMe,
+                    ExternalTimestamp = timestamp,
+                    ExternalMessageId = externalMessageId,
+                    UnreadCount = !fromMe ? 1 : 0,
+                    RawPayloadJson = rawBody
+                };
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Failed to map Evolution payload to Envelope");
+                return null;
+            }
+        }
+
         private IncomingMessageDto? MapEvolutionToIncoming(string rawBody)
         {
             try
@@ -147,10 +233,23 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 bool directionIn = true;
                 string? pushName = null;
 
+                string? externalMessageId = null;
+                bool fromMe = false;
+
+                string? mediaUrl = null;
+                string? mediaMime = null;
+                
+
                 if (dataElem.TryGetProperty("key", out var keyElem))
                 {
-                    if (keyElem.TryGetProperty("remoteJid", out var rj)) remoteJid = rj.GetString();
-                    if (keyElem.TryGetProperty("participant", out var p)) participant = p.GetString();
+                    if (keyElem.TryGetProperty("remoteJid", out var rj)) 
+                        remoteJid = rj.GetString();
+                    if (keyElem.TryGetProperty("id", out var mid))
+                        externalMessageId = mid.GetString();
+                    if (keyElem.TryGetProperty("participant", out var p)) 
+                        participant = p.GetString();
+                    if (keyElem.TryGetProperty("fromMe", out var fm))
+                        fromMe = fm.GetBoolean();
                 }
 
                 if (root.TryGetProperty("instance", out var inst)) instance = inst.GetString();
@@ -176,8 +275,25 @@ namespace crmchapultepec.Components.EvolutionWebhook
                         }
                     }
 
-                    if (msgElem.TryGetProperty("timestamp", out var ts) && ts.TryGetInt64(out var tsv))
-                        timestamp = tsv;
+                    //if (msgElem.TryGetProperty("timestamp", out var ts) && ts.TryGetInt64(out var tsv))
+                    //    timestamp = tsv;
+                    if (dataElem.TryGetProperty("messageTimestamp", out var mts) && mts.TryGetInt64(out var mtsv))
+                    {
+                        timestamp = mtsv;
+                    }
+
+                    if (msgElem.TryGetProperty("imageMessage", out var img))
+                    {
+                        mediaUrl = img.GetProperty("url").GetString();
+                        mediaMime = img.GetProperty("mimetype").GetString();
+                    }
+                    else if (msgElem.TryGetProperty("documentMessage", out var docMsg))
+                    {
+                        mediaUrl = docMsg.GetProperty("url").GetString();
+                        mediaMime = docMsg.GetProperty("mimetype").GetString();
+                    }
+
+
                 }
 
                 // sender: en varios logs aparece "sender" separado del key.remoteJid
@@ -196,7 +312,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     displayName: pushName ?? "",
                     text: messageText ?? "",
                     timestamp: timestamp,
-                    directionIn: true,
+                    directionIn = !fromMe,
                     ai: null,
                     action: "initial",
                     reason: "incoming_from_evolution",
@@ -234,6 +350,30 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 return false;
             }
         }
+
+        //helper
+        private async Task SaveRawEvolutionPayloadAsync(
+        string rawBody,
+        string threadId,
+        CancellationToken ct)
+        {
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
+
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+            db.EvolutionRawPayloads.Add(new EvolutionRawPayload
+            {
+                ThreadId = threadId,
+                PayloadJson = rawBody,
+                ReceivedUtc = DateTime.UtcNow,
+                Source = "evolution",
+                Processed = false
+            });
+
+            await db.SaveChangesAsync(ct);
+        }
+
 
     }
 }
