@@ -101,7 +101,15 @@ namespace crmchapultepec.Components.EvolutionWebhook
             }
 
             // 🔹 Guardar RAW PAYLOAD (SIEMPRE)
-            await SaveRawEvolutionPayloadAsync(body, envelope.ThreadId, ct);
+            var rawId = await SaveRawPayloadAsync(body, ct);
+
+            _log.LogInformation(
+                "Evolution raw payload saved. Id={id}, Instance={instance}",
+                rawId,
+                Request.Headers["X-Instance"]);
+
+            // 🔹 Guardar RAW PAYLOAD (SIEMPRE)
+            //await SaveRawEvolutionPayloadAsync(body, envelope.ThreadId, ct);
 
 
 
@@ -373,6 +381,79 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
             await db.SaveChangesAsync(ct);
         }
+
+        private async Task<int> SaveRawPayloadAsync(string rawBody, CancellationToken ct)
+        {
+            using var doc = JsonDocument.Parse(rawBody);
+            var root = doc.RootElement;
+
+            var data = root.TryGetProperty("data", out var d) ? d : root;
+
+            string? instance = root.TryGetProperty("instance", out var i) ? i.GetString() : null;
+            string? @event = root.TryGetProperty("event", out var e) ? e.GetString() : null;
+            string? sender = root.TryGetProperty("sender", out var s) ? s.GetString() : null;
+            string? messageType = data.TryGetProperty("messageType", out var mt) ? mt.GetString() : null;
+            string? pushName = data.TryGetProperty("pushName", out var pn) ? pn.GetString() : null;
+
+            bool? fromMe = null;
+            string? remoteJid = null;
+
+            if (data.TryGetProperty("key", out var key))
+            {
+                if (key.TryGetProperty("fromMe", out var fm))
+                    fromMe = fm.GetBoolean();
+
+                if (key.TryGetProperty("remoteJid", out var rj))
+                    remoteJid = rj.GetString();
+            }
+
+            string? customerPhone = remoteJid?
+                .Replace("@s.whatsapp.net", "")
+                .Replace("@lid", "");
+
+            DateTime? messageDateUtc = null;
+            if (data.TryGetProperty("messageTimestamp", out var mts) &&
+                mts.TryGetInt64(out var ts))
+            {
+                messageDateUtc = DateTimeOffset.FromUnixTimeSeconds(ts).UtcDateTime;
+            }
+
+            var threadId = $"{instance}:{remoteJid ?? sender ?? "unknown"}";
+
+            var entity = new EvolutionRawPayload
+            {
+                ThreadId = threadId,
+                Source = "evolution",
+                PayloadJson = rawBody,
+                ReceivedUtc = DateTime.UtcNow,
+                Processed = false,
+
+                Instance = instance,
+                Event = @event,
+                MessageType = messageType,
+                RemoteJid = remoteJid,
+                FromMe = fromMe,
+                Sender = sender,
+                CustomerPhone = customerPhone,
+                CustomerDisplayName = pushName,
+                MessageDateUtc = messageDateUtc,
+
+                Notes = HttpContext.Connection.RemoteIpAddress?.ToString()
+            };
+
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
+
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+            db.EvolutionRawPayloads.Add(entity);
+            await db.SaveChangesAsync(ct);
+
+            return entity.Id;
+        }
+
+
+
 
 
     }

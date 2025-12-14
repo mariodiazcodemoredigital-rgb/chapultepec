@@ -16,6 +16,24 @@ namespace crmchapultepec.entities.EvolutionWebhook
 
             public string Source { get; set; } = "evolution";
 
+            public string? Instance { get; set; }
+
+            public string? Event { get; set; }
+
+            public string? MessageType { get; set; }
+
+            public string? RemoteJid { get; set; }
+
+            public bool? FromMe { get; set; }
+
+            public string? Sender { get; set; }
+
+            public string? CustomerPhone { get; set; }
+
+            public string? CustomerDisplayName { get; set; }
+
+            public DateTime? MessageDateUtc { get; set; }
+
             public DateTime ReceivedUtc { get; set; } = DateTime.UtcNow;
 
             public string PayloadJson { get; set; } = default!;
@@ -24,6 +42,7 @@ namespace crmchapultepec.entities.EvolutionWebhook
 
             public string? Notes { get; set; }
         }
+
     }
 
 }
