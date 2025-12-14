@@ -26,8 +26,27 @@ namespace crmchapultepec.entities.EvolutionWebhook
         public string MessageType { get; set; } = default!;
         public string RawPayloadJson { get; set; } = default!;
         public DateTime CreatedAtUtc { get; set; }
-        
-        
+
+        // =========================
+        // Media crypto (WhatsApp)
+        // =========================
+        public string? MediaKey { get; set; }
+        public string? FileSha256 { get; set; }
+        public string? FileEncSha256 { get; set; }
+        public string? DirectPath { get; set; }
+        public long? MediaKeyTimestamp { get; set; }
+
+        // =========================
+        // Media metadata
+        // =========================
+        public string? MediaType { get; set; }   // image, document, audio, video
+        public string? FileName { get; set; }
+        public long? FileLength { get; set; }
+        public int? PageCount { get; set; }
+        public string? ThumbnailBase64 { get; set; }
+
+
+
     }
 
 }

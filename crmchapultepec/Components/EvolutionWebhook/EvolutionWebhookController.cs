@@ -521,6 +521,19 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 string? mediaCaption = null;
                 MessageKind messageKind;
 
+                string? mediaKey = null;
+                string? fileSha256 = null;
+                string? fileEncSha256 = null;
+                string? directPath = null;
+                long? mediaKeyTimestamp = null;
+
+                string? fileName = null;
+                long? fileLength = null;
+                int? pageCount = null;
+                string? thumbnailBase64 = null;
+                string? mediaType = null;
+
+
                 switch (messageType)
                 {
                     case "conversation":
@@ -530,38 +543,115 @@ namespace crmchapultepec.Components.EvolutionWebhook
                         break;
 
                     case "imageMessage":
-                        messageKind = MessageKind.Image;
-                        var img = message.GetProperty("imageMessage");
-                        mediaUrl = img.GetProperty("url").GetString();
-                        mediaMime = img.GetProperty("mimetype").GetString();
-                        mediaCaption = img.TryGetProperty("caption", out var ic) ? ic.GetString() : null;
-                        textPreview = "[Imagen]";
-                        break;
+                        {
+                            messageKind = MessageKind.Image;
+                            mediaType = "image";
+
+                            var img = message.GetProperty("imageMessage");
+
+                            mediaUrl = img.GetProperty("url").GetString();
+                            mediaMime = img.GetProperty("mimetype").GetString();
+                            mediaCaption = img.TryGetProperty("caption", out var ic) ? ic.GetString() : null;
+
+                            mediaKey = img.GetProperty("mediaKey").GetString();
+                            fileSha256 = img.GetProperty("fileSha256").GetString();
+                            fileEncSha256 = img.GetProperty("fileEncSha256").GetString();
+                            directPath = img.GetProperty("directPath").GetString();
+                            mediaKeyTimestamp = img.TryGetProperty("mediaKeyTimestamp", out var mts)
+                                ? mts.GetInt64()
+                                : null;
+
+                            fileLength = img.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : null;
+                            thumbnailBase64 = img.TryGetProperty("jpegThumbnail", out var jt) ? jt.GetString() : null;
+
+                            textPreview = "[Imagen]";
+                            break;
+                        }
+
 
                     case "audioMessage":
-                        messageKind = MessageKind.Audio;
-                        var aud = message.GetProperty("audioMessage");
-                        mediaUrl = aud.GetProperty("url").GetString();
-                        mediaMime = aud.GetProperty("mimetype").GetString();
-                        textPreview = "[Audio]";
-                        break;
+                        {
+                            messageKind = MessageKind.Audio;
+                            mediaType = "audio";
+
+                            var aud = message.GetProperty("audioMessage");
+
+                            mediaUrl = aud.GetProperty("url").GetString();
+                            mediaMime = aud.GetProperty("mimetype").GetString();
+
+                            mediaKey = aud.GetProperty("mediaKey").GetString();
+                            fileSha256 = aud.GetProperty("fileSha256").GetString();
+                            fileEncSha256 = aud.GetProperty("fileEncSha256").GetString();
+                            directPath = aud.GetProperty("directPath").GetString();
+                            mediaKeyTimestamp = aud.TryGetProperty("mediaKeyTimestamp", out var mts)
+                                ? mts.GetInt64()
+                                : null;
+
+                            fileLength = aud.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : null;
+
+                            textPreview = "[Audio]";
+                            break;
+                        }
+
 
                     case "documentMessage":
-                        messageKind = MessageKind.Document;
-                        var docu = message.GetProperty("documentMessage");
-                        mediaUrl = docu.GetProperty("url").GetString();
-                        mediaMime = docu.GetProperty("mimetype").GetString();
-                        mediaCaption = docu.TryGetProperty("title", out var title) ? title.GetString() : null;
-                        textPreview = "[Documento]";
-                        break;
+                        {
+                            messageKind = MessageKind.Document;
+                            mediaType = "document";
+
+                            var docu = message.GetProperty("documentMessage");
+
+                            mediaUrl = docu.GetProperty("url").GetString();
+                            mediaMime = docu.GetProperty("mimetype").GetString();
+                            mediaCaption = docu.TryGetProperty("title", out var title) ? title.GetString() : null;
+
+                            mediaKey = docu.GetProperty("mediaKey").GetString();
+                            fileSha256 = docu.GetProperty("fileSha256").GetString();
+                            fileEncSha256 = docu.GetProperty("fileEncSha256").GetString();
+                            directPath = docu.GetProperty("directPath").GetString();
+                            mediaKeyTimestamp = docu.TryGetProperty("mediaKeyTimestamp", out var mts)
+                                ? mts.GetInt64()
+                                : null;
+
+                            fileName = docu.TryGetProperty("fileName", out var fn) ? fn.GetString() : null;
+                            fileLength = docu.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : null;
+                            pageCount = docu.TryGetProperty("pageCount", out var pc) ? pc.GetInt32() : null;
+                            thumbnailBase64 = docu.TryGetProperty("jpegThumbnail", out var jt) ? jt.GetString() : null;
+
+                            textPreview = "[Documento]";
+                            break;
+                        }
+
 
                     case "stickerMessage":
-                        messageKind = MessageKind.Sticker;
-                        var stk = message.GetProperty("stickerMessage");
-                        mediaUrl = stk.GetProperty("url").GetString();
-                        mediaMime = stk.GetProperty("mimetype").GetString();
-                        textPreview = "[Sticker]";
-                        break;
+                        {
+                            messageKind = MessageKind.Sticker;
+                            mediaType = "sticker";
+
+                            var stk = message.GetProperty("stickerMessage");
+
+                            mediaUrl = stk.GetProperty("url").GetString();
+                            mediaMime = stk.GetProperty("mimetype").GetString();
+
+                            mediaKey = stk.GetProperty("mediaKey").GetString();
+                            fileSha256 = stk.GetProperty("fileSha256").GetString();
+                            fileEncSha256 = stk.GetProperty("fileEncSha256").GetString();
+                            directPath = stk.GetProperty("directPath").GetString();
+                            mediaKeyTimestamp = stk.TryGetProperty("mediaKeyTimestamp", out var mts)
+                                ? mts.GetInt64()
+                                : null;
+
+                            fileLength = stk.TryGetProperty("fileLength", out var fl)
+                                ? fl.GetInt64()
+                                : null;
+
+                            // Stickers no tienen caption
+                            mediaCaption = null;
+
+                            textPreview = "[Sticker]";
+                            break;
+                        }
+
 
                     default:
                         messageKind = MessageKind.Text;
@@ -621,7 +711,17 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 .FirstOrDefaultAsync(t => t.ThreadId == snap.ThreadId, ct);
 
             if (thread != null)
+            {
+                thread.LastMessageUtc = snap.CreatedAtUtc;
+                thread.LastMessagePreview = snap.TextPreview;
+
+                if (snap.DirectionIn)
+                    thread.UnreadCount += 1;
+
+                await db.SaveChangesAsync();
                 return thread;
+    
+            }
 
             thread = new CrmThread
             {
@@ -722,10 +822,83 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
             await db.SaveChangesAsync(ct);
 
+            var msg = await InsertMessageAsync(thread, snap, ct);
+            await InsertMediaAsync(msg, snap, ct);
+
             // Notifica SignalR
             await NotifySignalRAsync(thread, message);
         }
 
+
+
+
+        private async Task<CrmMessage> InsertMessageAsync(CrmThread thread, EvolutionMessageSnapshotDto s, CancellationToken ct = default)
+        {
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
+
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+            var msg = new CrmMessage
+            {
+                ThreadRefId = thread.Id,
+                Sender = s.Sender,
+                DisplayName = s.CustomerDisplayName,
+                Text = s.Text,
+                TimestampUtc = s.CreatedAtUtc,
+                ExternalTimestamp = s.ExternalTimestamp,
+                DirectionIn = s.DirectionIn,
+
+                MediaUrl = s.MediaUrl,
+                MediaMime = s.MediaMime,
+                MediaCaption = s.MediaCaption,
+                MediaType = s.MessageType,
+
+                MessageKind = (int)s.MessageKind,
+                HasMedia = s.MessageKind != MessageKind.Text,
+
+                ExternalId = s.ExternalMessageId,
+                RawPayload = s.RawPayloadJson,
+                RawHash = ComputeSha256(s.RawPayloadJson),
+                CreatedUtc = DateTime.UtcNow
+            };
+
+            db.CrmMessages.Add(msg);
+            await db.SaveChangesAsync();
+
+            return msg;
+        }
+
+        private async Task InsertMediaAsync(CrmMessage msg,EvolutionMessageSnapshotDto s, CancellationToken ct = default)
+        {
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
+
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+            if (!msg.HasMedia) return;
+
+            var media = new CrmMessageMedia
+            {
+                MessageId = msg.Id,
+                MediaType = s.MessageType,
+                MimeType = s.MediaMime,
+                MediaUrl = s.MediaUrl,
+                MediaKey = s.MediaKey,
+                FileSha256 = s.FileSha256,
+                FileEncSha256 = s.FileEncSha256,
+                DirectPath = s.DirectPath,
+                MediaKeyTimestamp = s.MediaKeyTimestamp,
+                FileName = s.FileName,
+                FileLength = s.FileLength,
+                PageCount = s.PageCount,
+                ThumbnailBase64 = s.ThumbnailBase64,
+                CreatedUtc = DateTime.UtcNow
+            };
+
+            db.CrmMessageMedias.Add(media);
+            await db.SaveChangesAsync();
+        }
 
 
 

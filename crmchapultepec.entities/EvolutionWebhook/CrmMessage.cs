@@ -65,6 +65,9 @@ namespace crmchapultepec.entities.EvolutionWebhook
         public bool HasMedia { get; set; }
 
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+
+        //Navegacion con CrmMessageMedia
+        public CrmMessageMedia? Media { get; set; }
     }
 
 }

@@ -21,7 +21,7 @@ namespace crmchapultepec.data.Data
 
         public DbSet<WebhookControl> WebhookControls => Set<WebhookControl>();
         public DbSet<EvolutionRawPayload> EvolutionRawPayloads => Set<EvolutionRawPayload>();
-
+        public DbSet<CrmMessageMedia> CrmMessageMedias => Set<CrmMessageMedia>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
