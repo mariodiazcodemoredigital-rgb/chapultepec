@@ -513,7 +513,10 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
                 var pushName = data.TryGetProperty("pushName", out var pn) ? pn.GetString() : null;
 
-                var timestamp = data.GetProperty("messageTimestamp").GetInt64();
+                var tsElement = data.GetProperty("messageTimestamp");
+                var timestamp = ReadUnixTimestamp(tsElement);
+
+                //var timestamp = data.GetProperty("messageTimestamp").GetInt64();
                 var createdUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
 
                 // =========================
