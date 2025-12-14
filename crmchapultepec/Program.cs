@@ -51,6 +51,9 @@ builder.Services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, CustomC
 // Repositorio COMPARTIDO entre endpoint y componentes (YA USA SQL)
 builder.Services.AddScoped<EvolutionWebhookRepository>();
 builder.Services.AddScoped<IEvolutionWebhookService, EvolutionWebhookService>();
+//Elementos para WebControl (apagar /encender)
+builder.Services.AddScoped<WebhookControlRepository>();
+builder.Services.AddScoped<IWebhookControlService, WebhookControlService>();
 
 
 // Queue + Hosted Service

@@ -34,8 +34,15 @@ namespace crmchapultepec.Components.EvolutionWebhook
         }
 
         [HttpPost]
-        public async Task<IActionResult> Post()
+        public async Task<IActionResult> Post([FromServices] IWebhookControlService toggle, CancellationToken ct)
         {
+            // 🔴 Switch General para apagar los insert de Evolution API
+            if (!await toggle.IsEvolutionEnabledAsync(ct))
+            {
+                _log.LogWarning("Evolution webhook recibido pero DESACTIVADO");
+                return Ok(new { status = "disabled" }); // SIEMPRE 200
+            }
+
             // 1) Validar IP (opcional y complementario si tienes ips de Evolution)
             if (_ipWhitelist.Length > 0)
             {
@@ -84,15 +91,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
             IncomingMessageDto? dto;
             var mapped = MapEvolutionToIncoming(body);
             try
-            {
-                //dto = JsonSerializer.Deserialize<IncomingMessageDto>(body,
-                //    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                //if (dto == null)
-                //{
-                //    _log.LogWarning("Webhook payload could not be parsed");
-                //    return BadRequest();
-                //}
-                
+            {   
                 if (mapped == null)
                 {
                     // opcional: enqueue raw or return accepted_raw

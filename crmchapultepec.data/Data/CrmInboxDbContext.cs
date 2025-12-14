@@ -18,6 +18,9 @@ namespace crmchapultepec.data.Data
         public DbSet<CrmContact> CrmContactDbs { get; set; } = null!;
         public DbSet<MessageDeadLetter> MessageDeadLetters { get; set; } = null!;
 
+        public DbSet<WebhookControl> WebhookControls => Set<WebhookControl>();
+
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

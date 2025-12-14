@@ -116,6 +116,14 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
 
             // Crear un scope para usar servicios scoped
             using var scope = _sp.CreateScope();
+            var toggle = scope.ServiceProvider.GetRequiredService<IWebhookControlService>();
+
+            if (!await toggle.IsEvolutionEnabledAsync(ct))
+            {
+                _log.LogInformation("Processing skipped: Evolution webhook is OFF");
+                return;
+            }
+
             var _repo = scope.ServiceProvider.GetRequiredService<IEvolutionWebhookService>();
 
             try
