@@ -368,7 +368,6 @@ namespace crmchapultepec.Components.EvolutionWebhook
             return Convert.ToHexString(bytes);
         }
 
-
         private static bool FixedTimeEqualsHex(string aHex, string bHex)
         {
             try
@@ -382,6 +381,19 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 return false;
             }
         }
+
+        private static long ReadUnixTimestamp(JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Number)
+                return element.GetInt64();
+
+            if (element.ValueKind == JsonValueKind.String &&
+                long.TryParse(element.GetString(), out var value))
+                return value;
+
+            return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        }
+
 
         //helper
         private async Task SaveRawEvolutionPayloadAsync(
@@ -436,11 +448,15 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 .Replace("@lid", "");
 
             DateTime? messageDateUtc = null;
-            if (data.TryGetProperty("messageTimestamp", out var mts) &&
-                mts.TryGetInt64(out var ts))
-            {
-                messageDateUtc = DateTimeOffset.FromUnixTimeSeconds(ts).UtcDateTime;
-            }
+            var tsElement = data.GetProperty("messageTimestamp");
+            var timestamp = ReadUnixTimestamp(tsElement);
+
+
+            //if (data.TryGetProperty("messageTimestamp", out var mts) &&
+            //    mts.TryGetInt64(out var ts))
+            //{
+                messageDateUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
+            //}
 
             var threadId = $"{instance}:{remoteJid ?? sender ?? "unknown"}";
 
