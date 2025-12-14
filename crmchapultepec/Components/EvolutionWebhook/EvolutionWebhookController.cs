@@ -1,9 +1,11 @@
 ﻿using crmchapultepec.data.Data;
 using crmchapultepec.entities.EvolutionWebhook;
 using crmchapultepec.entities.EvolutionWebhook.crmchapultepec.data.Entities.EvolutionWebhook;
+using crmchapultepec.services.Hubs;
 using crmchapultepec.services.Interfaces.EvolutionWebhook;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
@@ -18,6 +20,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
         private readonly ILogger<EvolutionWebhookController> _log;
         private readonly IMessageQueue _queue;
         private readonly IConfiguration _cfg;
+        private readonly IHubContext<CrmHub> _hubContext;
         private readonly string? _hmacSecret;
         private readonly string? _inboundToken;
         private readonly string[] _ipWhitelist;
@@ -25,11 +28,13 @@ namespace crmchapultepec.Components.EvolutionWebhook
         public EvolutionWebhookController(
         ILogger<EvolutionWebhookController> log,
         IMessageQueue queue,
-        IConfiguration cfg)
+        IConfiguration cfg,
+        IHubContext<CrmHub> hubContext)
         {
             _log = log;
             _queue = queue;
             _cfg = cfg;
+            _hubContext = hubContext;
             _hmacSecret = cfg["Evolution:WebhookHmacSecret"];        // opcional
             _inboundToken = cfg["Evolution:WebhookInboundToken"];  // opcional
             _ipWhitelist = (cfg["Evolution:WebhookIpWhitelist"] ?? "")
@@ -716,8 +721,36 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 thread.UnreadCount += 1;
 
             await db.SaveChangesAsync(ct);
+
+            // Notifica SignalR
+            await NotifySignalRAsync(thread, message);
         }
 
+
+
+
+        private async Task NotifySignalRAsync(CrmThread thread, CrmMessage msg)
+        {
+            if (string.IsNullOrEmpty(thread.BusinessAccountId))
+                return;
+
+            await _hubContext.Clients
+                .Group(thread.BusinessAccountId)
+                .SendAsync("NewMessage", new
+                {
+                     
+                    ThreadId = thread.ThreadId,
+                    ThreadDbId = thread.Id,
+                    MessageId = msg.Id,
+                    Sender = msg.Sender,
+                    DisplayName = msg.DisplayName,
+                    Text = msg.Text,
+                    MessageKind = msg.MessageKind,
+                    MediaUrl = msg.MediaUrl,
+                    CreatedUtc = msg.TimestampUtc,
+                    DirectionIn = msg.DirectionIn
+                });
+        }
 
 
 

@@ -107,98 +107,37 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
 
         private async Task ProcessAsync(IncomingMessageDto dto, CancellationToken ct)
         {
-            string rawDto = "{}";
-            try { rawDto = JsonSerializer.Serialize(dto); } catch { rawDto = "{}"; }
-
-            _log.LogInformation("Processing incoming message ({threadId}) from {sender}. DTO: {dto}", dto?.threadId, dto?.sender, rawDto);
-
-            var rawHash = ComputeSha256HexSafe(rawDto);
-
-            // Crear un scope para usar servicios scoped
             using var scope = _sp.CreateScope();
             var toggle = scope.ServiceProvider.GetRequiredService<IWebhookControlService>();
 
             if (!await toggle.IsEvolutionEnabledAsync(ct))
+                return;
+
+            if (dto == null || string.IsNullOrWhiteSpace(dto.threadId))
+                return;
+
+            var repo = scope.ServiceProvider.GetRequiredService<IEvolutionWebhookService>();
+
+            // 🔹 Buscar thread YA EXISTENTE (creado por snapshot)
+            var thread = await repo.GetThreadByExternalIdAsync(dto.threadId, ct);
+            if (thread == null)
             {
-                _log.LogInformation("Processing skipped: Evolution webhook is OFF");
+                _log.LogWarning("Thread not found for DTO {threadId}", dto.threadId);
                 return;
             }
 
-            var _repo = scope.ServiceProvider.GetRequiredService<IEvolutionWebhookService>();
-
-            try
-            {
-                // idempotency
-                var exists = false;
-                try { exists = await _repo.MessageExistsByRawHashAsync(rawHash, ct); } catch (Exception exId) { _log.LogWarning(exId, "Idempotency check failed - continuing"); }
-
-                if (exists)
+            // 🔹 Pipeline / AI
+            await repo.InsertPipelineHistoryAsync(
+                new PipelineHistory
                 {
-                    _log.LogInformation("Duplicate message detected (rawHash) - skipping.");
-                    return;
-                }
-
-                if (dto == null || string.IsNullOrWhiteSpace(dto.threadId) || string.IsNullOrWhiteSpace(dto.sender))
-                {
-                    _log.LogWarning("DTO invalid - saving dead-letter");
-                    await _repo.SaveDeadLetterAsync(new MessageDeadLetter { RawPayload = rawDto, Error = "missing_thread_or_sender", Source = "worker", OccurredUtc = DateTime.UtcNow, CreatedUtc = DateTime.UtcNow }, ct);
-                    return;
-                }
-
-                // create/update thread
-                var threadIntId = await _repo.CreateOrUpdateThreadAsync(dto.threadId, dto.businessAccountId, dto.timestamp, ct);
-
-                // create message entity
-                var tsUtc = DateTime.UtcNow;
-                try { if (dto.timestamp > 0) tsUtc = DateTimeOffset.FromUnixTimeSeconds(dto.timestamp).UtcDateTime; } catch { tsUtc = DateTime.UtcNow; }
-
-                var msgEntity = new CrmMessage
-                {
-                    ThreadRefId = threadIntId,
-                    Sender = dto.sender,
-                    DisplayName = dto.displayName,
-                    Text = dto.text,
-                    TimestampUtc = tsUtc,
-                    DirectionIn = dto.directionIn,
-                    RawPayload = rawDto,
-                    RawHash = rawHash,
+                    ThreadRefId = thread.Id,
+                    PipelineName = dto.ai?.pipelineName ?? "Default",
+                    StageName = dto.ai?.stageName ?? "Inbox",
+                    Source = "worker",
                     CreatedUtc = DateTime.UtcNow
-                };
+                }, ct);
 
-                var messageId = await _repo.InsertMessageAsync(msgEntity);
-
-                await _repo.InsertPipelineHistoryAsync(new PipelineHistory { ThreadRefId = threadIntId, PipelineName = dto.ai?.pipelineName ?? "Unassigned", StageName = dto.ai?.stageName ?? "Nuevos", Source = dto.ai != null ? "webhook_ai" : "system", CreatedUtc = DateTime.UtcNow }, ct);
-
-                // SignalR notify
-                try
-                {
-                    using var scopeS = _sp.CreateScope();
-                    var hubContext = scopeS.ServiceProvider.GetService<IHubContext<CrmHub>>();
-                    if (hubContext != null && !string.IsNullOrEmpty(dto.businessAccountId))
-                    {
-                        await hubContext.Clients.Group(dto.businessAccountId).SendAsync("NewMessage", new { ThreadId = dto.threadId, Sender = msgEntity.Sender, Text = msgEntity.Text, MessageId = messageId }, ct);
-                    }
-                }
-                catch (Exception exHub)
-                {
-                    _log.LogWarning(exHub, "SignalR notify failed");
-                }
-
-                _log.LogInformation("Message processed and saved. MsgId={msgId} Thread={threadId}", messageId, dto.threadId);
-            }
-            catch (Exception exTop)
-            {
-                _log.LogError(exTop, "Unhandled error processing DTO {threadId}", dto?.threadId);
-                try
-                {
-                    await _repo.SaveDeadLetterAsync(new MessageDeadLetter { RawPayload = rawDto, Error = exTop.ToString(), Source = "worker", OccurredUtc = DateTime.UtcNow, CreatedUtc = DateTime.UtcNow }, ct);
-                }
-                catch (Exception exSave)
-                {
-                    _log.LogWarning(exSave, "Failed to save dead-letter via repo - falling back to file");
-                    await SaveDeadLetterFallbackAsync(rawDto, exTop.ToString(), ct);
-                }
-            }
+            _log.LogInformation("Worker processed DTO for thread {threadId}", dto.threadId);
         }
 
 

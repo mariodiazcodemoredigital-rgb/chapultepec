@@ -74,6 +74,16 @@ namespace crmchapultepec.data.Repositories.EvolutionWebhook
             await db.SaveChangesAsync(ct);
         }
 
+        public async Task<CrmThread?> GetThreadByExternalIdAsync(string threadId, CancellationToken ct)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            return await db.CrmThreads
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.ThreadId == threadId, ct);
+        }
+
+
 
     }
 }

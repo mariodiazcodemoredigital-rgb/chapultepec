@@ -14,5 +14,6 @@ namespace crmchapultepec.services.Interfaces.EvolutionWebhook
         Task<int> InsertMessageAsync(CrmMessage message, CancellationToken ct = default);
         Task InsertPipelineHistoryAsync(PipelineHistory pipeline, CancellationToken ct = default);
         Task SaveDeadLetterAsync(MessageDeadLetter deadLetter, CancellationToken ct = default);
+        Task<CrmThread?> GetThreadByExternalIdAsync(string threadId, CancellationToken ct);
     }
 }

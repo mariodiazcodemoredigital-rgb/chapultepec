@@ -32,5 +32,8 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
 
         public Task SaveDeadLetterAsync(MessageDeadLetter deadLetter, CancellationToken ct = default)
         => _evolutionWebhookRepository.SaveDeadLetterAsync(deadLetter, ct);
+
+        public async Task<CrmThread?> GetThreadByExternalIdAsync(string threadId, CancellationToken ct)
+        => await _evolutionWebhookRepository.GetThreadByExternalIdAsync(threadId, ct);
     }
 }
