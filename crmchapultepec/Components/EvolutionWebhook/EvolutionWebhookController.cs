@@ -730,24 +730,29 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     Sender = senderRoot ?? remoteJid,
                     CustomerPhone = remoteJid.Replace("@s.whatsapp.net", ""),
                     CustomerDisplayName = pushName,
-
                     DirectionIn = !fromMe,
-
                     MessageKind = messageKind,
                     MessageType = messageType,
-
                     Text = text,
                     TextPreview = textPreview,
-
                     MediaUrl = mediaUrl,
                     MediaMime = mediaMime,
                     MediaCaption = mediaCaption,
+                    MediaType = mediaType,
+
+                    MediaKey = mediaKey,
+                    FileSha256 = fileSha256,
+                    FileEncSha256 = fileEncSha256,
+                    DirectPath = directPath,
+                    MediaKeyTimestamp = mediaKeyTimestamp,
+                    FileName = fileName,
+                    FileLength = fileLength,
+                    PageCount = pageCount,
+                    ThumbnailBase64 = thumbnailBase64,
 
                     ExternalMessageId = externalMessageId,
                     ExternalTimestamp = timestamp,
-
                     Source = source,
-
                     RawPayloadJson = rawBody,
                     CreatedAtUtc = createdUtc
                 };
