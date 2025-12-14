@@ -108,6 +108,17 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 rawId,
                 Request.Headers["X-Instance"]);
 
+            var snapshot = BuildSnapshot(body);
+
+            if (snapshot == null)
+            {
+                _log.LogWarning("Could not build snapshot from evolution payload");
+                return Ok(new { status = "accepted_raw" });
+            }
+            
+            //Persistir la informacion del snapshot creada anteriormente y guardarla en las tablas de Thread y Messages
+            await PersistSnapshotAsync(snapshot);
+
             // 🔹 Guardar RAW PAYLOAD (SIEMPRE)
             //await SaveRawEvolutionPayloadAsync(body, envelope.ThreadId, ct);
 
@@ -345,6 +356,14 @@ namespace crmchapultepec.Components.EvolutionWebhook
             return Convert.ToHexString(hash).ToLowerInvariant();
         }
 
+        private static string ComputeSha256(string raw)
+        {
+            using var sha = SHA256.Create();
+            var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
+            return Convert.ToHexString(bytes);
+        }
+
+
         private static bool FixedTimeEqualsHex(string aHex, string bHex)
         {
             try
@@ -450,6 +469,253 @@ namespace crmchapultepec.Components.EvolutionWebhook
             await db.SaveChangesAsync(ct);
 
             return entity.Id;
+        }
+
+        private EvolutionMessageSnapshotDto? BuildSnapshot(string rawBody)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(rawBody);
+                var root = doc.RootElement;
+                var data = root.TryGetProperty("data", out var d) ? d : root;
+
+                // =========================
+                // Identidad base
+                // =========================
+                var instance = root.GetProperty("instance").GetString()!;
+                var senderRoot = root.TryGetProperty("sender", out var s) ? s.GetString() : null;
+
+                var key = data.GetProperty("key");
+                var remoteJid = key.GetProperty("remoteJid").GetString()!;
+                var fromMe = key.GetProperty("fromMe").GetBoolean();
+                var externalMessageId = key.GetProperty("id").GetString();
+
+                var pushName = data.TryGetProperty("pushName", out var pn) ? pn.GetString() : null;
+
+                var timestamp = data.GetProperty("messageTimestamp").GetInt64();
+                var createdUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
+
+                // =========================
+                // Source
+                // =========================
+                var source =
+                    data.TryGetProperty("source", out var src) ? src.GetString() :
+                    root.TryGetProperty("source", out var src2) ? src2.GetString() :
+                    null;
+
+                // =========================
+                // Mensaje
+                // =========================
+                var messageType = data.GetProperty("messageType").GetString() ?? "unknown";
+                var message = data.GetProperty("message");
+
+                string textPreview;
+                string? text = null;
+                string? mediaUrl = null;
+                string? mediaMime = null;
+                string? mediaCaption = null;
+                MessageKind messageKind;
+
+                switch (messageType)
+                {
+                    case "conversation":
+                        messageKind = MessageKind.Text;
+                        text = message.GetProperty("conversation").GetString();
+                        textPreview = text ?? "";
+                        break;
+
+                    case "imageMessage":
+                        messageKind = MessageKind.Image;
+                        var img = message.GetProperty("imageMessage");
+                        mediaUrl = img.GetProperty("url").GetString();
+                        mediaMime = img.GetProperty("mimetype").GetString();
+                        mediaCaption = img.TryGetProperty("caption", out var ic) ? ic.GetString() : null;
+                        textPreview = "[Imagen]";
+                        break;
+
+                    case "audioMessage":
+                        messageKind = MessageKind.Audio;
+                        var aud = message.GetProperty("audioMessage");
+                        mediaUrl = aud.GetProperty("url").GetString();
+                        mediaMime = aud.GetProperty("mimetype").GetString();
+                        textPreview = "[Audio]";
+                        break;
+
+                    case "documentMessage":
+                        messageKind = MessageKind.Document;
+                        var docu = message.GetProperty("documentMessage");
+                        mediaUrl = docu.GetProperty("url").GetString();
+                        mediaMime = docu.GetProperty("mimetype").GetString();
+                        mediaCaption = docu.TryGetProperty("title", out var title) ? title.GetString() : null;
+                        textPreview = "[Documento]";
+                        break;
+
+                    case "stickerMessage":
+                        messageKind = MessageKind.Sticker;
+                        var stk = message.GetProperty("stickerMessage");
+                        mediaUrl = stk.GetProperty("url").GetString();
+                        mediaMime = stk.GetProperty("mimetype").GetString();
+                        textPreview = "[Sticker]";
+                        break;
+
+                    default:
+                        messageKind = MessageKind.Text;
+                        textPreview = "[Mensaje]";
+                        break;
+                }
+
+                // =========================
+                // Construcción del snapshot
+                // =========================
+                return new EvolutionMessageSnapshotDto
+                {
+                    ThreadId = $"{instance}:{remoteJid}",
+                    BusinessAccountId = instance,
+
+                    Sender = senderRoot ?? remoteJid,
+                    CustomerPhone = remoteJid.Replace("@s.whatsapp.net", ""),
+                    CustomerDisplayName = pushName,
+
+                    DirectionIn = !fromMe,
+
+                    MessageKind = messageKind,
+                    MessageType = messageType,
+
+                    Text = text,
+                    TextPreview = textPreview,
+
+                    MediaUrl = mediaUrl,
+                    MediaMime = mediaMime,
+                    MediaCaption = mediaCaption,
+
+                    ExternalMessageId = externalMessageId,
+                    ExternalTimestamp = timestamp,
+
+                    Source = source,
+
+                    RawPayloadJson = rawBody,
+                    CreatedAtUtc = createdUtc
+                };
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "BuildSnapshot failed");
+                return null;
+            }
+        }
+
+        //Ya con estos guarda la informacion en las tablas de thread y messages
+        private async Task<CrmThread> GetOrCreateThreadAsync(EvolutionMessageSnapshotDto snap, CancellationToken ct = default)
+        {
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
+
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+            var thread = await db.CrmThreads
+                .FirstOrDefaultAsync(t => t.ThreadId == snap.ThreadId, ct);
+
+            if (thread != null)
+                return thread;
+
+            thread = new CrmThread
+            {
+                ThreadId = snap.ThreadId,
+                BusinessAccountId = snap.BusinessAccountId,
+                Channel = 1, // WhatsApp
+                ThreadKey = snap.CustomerPhone,
+                CustomerDisplayName = snap.CustomerDisplayName,
+                CustomerPhone = snap.CustomerPhone,
+                CustomerPlatformId = snap.CustomerPhone,
+                CreatedUtc = snap.CreatedAtUtc,
+                LastMessageUtc = snap.CreatedAtUtc,
+                LastMessagePreview = snap.TextPreview,
+                UnreadCount = snap.DirectionIn ? 1 : 0,
+                Status = 0,
+                MainParticipant = snap.CustomerPhone
+            };
+
+            db.CrmThreads.Add(thread);
+            await db.SaveChangesAsync(ct);
+
+            return thread;
+        }
+
+
+        private async Task<bool> MessageExistsAsync(EvolutionMessageSnapshotDto snap, int threadId, CancellationToken ct = default)
+        {
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
+
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+            if (!string.IsNullOrEmpty(snap.ExternalMessageId))
+            {
+                return await db.CrmMessages.AnyAsync(m =>
+                    m.ThreadRefId == threadId &&
+                    m.ExternalId == snap.ExternalMessageId, ct);
+            }
+
+            var hash = ComputeSha256(snap.RawPayloadJson);
+
+            return await db.CrmMessages.AnyAsync(m =>
+                m.ThreadRefId == threadId &&
+                m.RawHash == hash, ct);
+        }
+
+
+        private async Task PersistSnapshotAsync(EvolutionMessageSnapshotDto snap, CancellationToken ct = default)
+        {
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
+
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+            var thread = await GetOrCreateThreadAsync(snap, ct);
+
+            if (await MessageExistsAsync(snap, thread.Id, ct))
+                return;
+
+            var rawHash = ComputeSha256(snap.RawPayloadJson);
+
+            var message = new CrmMessage
+            {
+                ThreadRefId = thread.Id,
+                Sender = snap.Sender,
+                DisplayName = snap.CustomerDisplayName,
+                Text = snap.Text,
+                TimestampUtc = snap.CreatedAtUtc,
+                ExternalTimestamp = snap.ExternalTimestamp,
+                DirectionIn = snap.DirectionIn,
+
+                MediaUrl = snap.MediaUrl,
+                MediaMime = snap.MediaMime,
+                MediaCaption = snap.MediaCaption,
+                MediaType = snap.MessageType,
+
+                RawPayload = snap.RawPayloadJson,
+                ExternalId = snap.ExternalMessageId,
+                WaMessageId = snap.ExternalMessageId,
+                RawHash = rawHash,
+
+                MessageKind = (int)snap.MessageKind,
+                HasMedia = snap.MediaUrl != null,
+
+                CreatedUtc = DateTime.UtcNow
+            };
+
+            db.CrmMessages.Add(message);
+
+            // =========================
+            // Update Thread state
+            // =========================
+            thread.LastMessageUtc = snap.CreatedAtUtc;
+            thread.LastMessagePreview = snap.TextPreview;
+
+            if (snap.DirectionIn)
+                thread.UnreadCount += 1;
+
+            await db.SaveChangesAsync(ct);
         }
 
 

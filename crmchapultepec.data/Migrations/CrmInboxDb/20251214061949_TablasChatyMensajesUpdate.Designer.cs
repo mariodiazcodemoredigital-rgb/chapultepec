@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using crmchapultepec.data.Data;
 
@@ -11,9 +12,11 @@ using crmchapultepec.data.Data;
 namespace crmchapultepec.data.Migrations.CrmInboxDb
 {
     [DbContext(typeof(CrmInboxDbContext))]
-    partial class CrmInboxDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251214061949_TablasChatyMensajesUpdate")]
+    partial class TablasChatyMensajesUpdate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -97,12 +100,6 @@ namespace crmchapultepec.data.Migrations.CrmInboxDb
                     b.Property<long?>("ExternalTimestamp")
                         .HasColumnType("bigint");
 
-                    b.Property<bool>("HasMedia")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("MediaCaption")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("MediaMime")
                         .HasColumnType("nvarchar(max)");
 
@@ -111,9 +108,6 @@ namespace crmchapultepec.data.Migrations.CrmInboxDb
 
                     b.Property<string>("MediaUrl")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("MessageKind")
-                        .HasColumnType("int");
 
                     b.Property<string>("RawHash")
                         .IsRequired()
