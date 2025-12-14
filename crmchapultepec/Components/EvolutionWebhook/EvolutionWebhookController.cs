@@ -845,8 +845,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
             await db.SaveChangesAsync(ct);
 
-            var msg = await InsertMessageAsync(thread, snap, ct);
-            await InsertMediaAsync(msg, snap, ct);
+            //var msg = await InsertMessageAsync(thread, snap, ct);
+            await InsertMediaAsync(message, snap, ct);
 
             // Notifica SignalR
             await NotifySignalRAsync(thread, message);
