@@ -66,6 +66,23 @@ namespace crmchapultepec.Components.EvolutionWebhook
         }
 
 
+
+        [HttpGet("view-sticker/{messageId}")]
+        public async Task<IActionResult> ViewSticker(int messageId, CancellationToken ct)
+        {
+            // 1. Buscar la media asociada al mensaje
+            var media = await _mediaService.GetByMessageIdAsync(messageId, ct);
+            if (media == null) return NotFound();
+
+            // 2. Desencriptar (Esto obtiene los bytes del .webp)
+            var bytes = await _mediaService.DecryptMedia(media, ct);
+            if (bytes == null) return BadRequest();
+
+            // 3. Retornar como imagen WebP para que el navegador la pinte
+            return File(bytes, "image/webp");
+        }
+
+
         // Endpoint para descargar/desencriptar un archivo por Id
         [HttpGet("download/{id}")]
         public async Task<IActionResult> Download(int id, CancellationToken ct)

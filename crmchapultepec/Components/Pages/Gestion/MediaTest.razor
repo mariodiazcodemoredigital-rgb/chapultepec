@@ -45,34 +45,4 @@ else
     }
 
 
-    // private byte[]? selectedBytes;
-    // private string? selectedFileName;
-    // private string? selectedFilePath;
-
-    // protected override async Task OnInitializedAsync()
-    // {
-    //     medias = await LoadMediasAsync();
-    // }
-
-    // private async Task<List<CrmMessageMedia>> LoadMediasAsync()
-    // {
-    //     // Traemos todos los registros de prueba
-    //     return await MediaRepo.GetAllAsync(); // necesitas un método GetAllAsync en el repo
-    // }
-
-    // private async Task SelectMedia(CrmMessageMedia media)
-    // {
-    //     selectedBytes = await MediaRepo.GetDecryptedDocumentAsync(media);
-
-    //     if (selectedBytes != null)
-    //     {
-    //         selectedFileName = media.FileName ?? "archivo.pdf";
-
-    //         // Guardar temporal en wwwroot/uploads
-    //         var path = Path.Combine("wwwroot", "uploads", selectedFileName);
-    //         await File.WriteAllBytesAsync(path, selectedBytes);
-
-    //         selectedFilePath = $"/uploads/{selectedFileName}";
-    //     }
-    // }
 }

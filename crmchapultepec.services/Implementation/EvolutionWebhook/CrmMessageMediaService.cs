@@ -35,5 +35,14 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
         {
             return _rmMessageMediaRepository.DecryptMediaAsync(media, ct);
         }
+
+        public async Task<CrmMessageMedia?> GetByMessageIdAsync(int messageId, CancellationToken ct = default)
+        {
+            // Buscamos en la lista de todos el primero que coincida con el MessageId
+            // Nota: Si tu repositorio tiene un método directo de búsqueda en SQL, úsalo.
+            // Si no, podemos filtrar así:
+            var all = await _rmMessageMediaRepository.GetAllAsync(ct);
+            return all.FirstOrDefault(x => x.MessageId == messageId);
+        }
     }
 }
