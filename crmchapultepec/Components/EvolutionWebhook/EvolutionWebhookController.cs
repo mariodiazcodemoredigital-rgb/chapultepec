@@ -497,6 +497,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
             bool? fromMe = null;
             string? remoteJid = null;
+            string? senderPn = null; //  Nueva variable para el número real
 
             if (data.TryGetProperty("key", out var key))
             {
@@ -505,19 +506,38 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
                 if (key.TryGetProperty("remoteJid", out var rj))
                     remoteJid = rj.GetString();
+
+                //  Extraemos también el senderPn si existe en la key
+                if (key.TryGetProperty("senderPn", out var spn))
+                    senderPn = spn.GetString();
             }
 
-            string? customerPhone = remoteJid?
+            //  LÓGICA DE UNIFICACIÓN (Igual a la de MapEvolutionToEnvelope)
+            // Buscamos cuál de los campos contiene el número real (@s.whatsapp.net)
+            string? targetJidForPhone = null;
+            if (remoteJid != null && remoteJid.Contains("@s.whatsapp.net"))
+                targetJidForPhone = remoteJid;
+            else if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
+                targetJidForPhone = senderPn;
+            else
+                targetJidForPhone = remoteJid; // Fallback
+
+            // Extraer solo el número
+            string? customerPhone = targetJidForPhone?
                 .Replace("@s.whatsapp.net", "")
-                .Replace("@lid", "");
+                .Replace("@lid", "")
+                .Replace("@c.us", "");
 
             DateTime? messageDateUtc = null;
-            var tsElement = data.GetProperty("messageTimestamp");
-            var timestamp = ReadUnixTimestamp(tsElement);
-         
-            messageDateUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;         
+            if (data.TryGetProperty("messageTimestamp", out var tsElement))
+            {
+                var timestamp = ReadUnixTimestamp(tsElement);
+                messageDateUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
+            }
 
-            var threadId = $"{instance}:{remoteJid ?? sender ?? "unknown"}";
+            //  El ThreadId de auditoría debe ser consistente: wa:numero
+            // Antes tenías instance:remoteJid, pero es mejor wa:phone para ligarlo fácil
+            var threadId = $"wa:{customerPhone ?? "unknown"}";
 
             var entity = new EvolutionRawPayload
             {
@@ -530,10 +550,10 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 Instance = instance,
                 Event = @event,
                 MessageType = messageType,
-                RemoteJid = remoteJid,
+                RemoteJid = remoteJid, // Guardamos el original (@lid si es el caso)
                 FromMe = fromMe,
                 Sender = sender,
-                CustomerPhone = customerPhone,
+                CustomerPhone = customerPhone, // Guardamos el número limpio
                 CustomerDisplayName = pushName,
                 MessageDateUtc = messageDateUtc,
 
@@ -542,7 +562,6 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
             using var scope = HttpContext.RequestServices.CreateScope();
             var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
-
             await using var db = await dbFactory.CreateDbContextAsync(ct);
 
             db.EvolutionRawPayloads.Add(entity);
@@ -568,7 +587,6 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     return null;
 
                 var instance = instProp.GetString()!;
-
                 var senderRoot = root.TryGetProperty("sender", out var s) ? s.GetString() : null;
 
                 // key
@@ -580,6 +598,9 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
                 var remoteJid = rj.GetString()!;
 
+                // 🚩 EXTRAER senderPn PARA VALIDACIÓN DE LID
+                string? senderPn = key.TryGetProperty("senderPn", out var spn) ? spn.GetString() : null;
+
                 var fromMe = key.TryGetProperty("fromMe", out var fm) && fm.GetBoolean();
                 var externalMessageId = key.TryGetProperty("id", out var kid) ? kid.GetString() : null;
 
@@ -587,14 +608,27 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 if (data.TryGetProperty("pushName", out var pn))
                     pushName = pn.GetString();
 
+                // 🚩 LÓGICA DE EXTRACCIÓN DE NÚMERO (Validación @s.whatsapp.net)
+                string? targetJidForPhone = null;
+                if (remoteJid.Contains("@s.whatsapp.net"))
+                    targetJidForPhone = remoteJid;
+                else if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
+                    targetJidForPhone = senderPn;
+                else
+                    targetJidForPhone = remoteJid;
 
+                var customerPhone = targetJidForPhone?
+                    .Replace("@s.whatsapp.net", "")
+                    .Replace("@lid", "")
+                    .Replace("@c.us", "");
+
+                // =========================
                 // timestamp (string o number)
+                // =========================
                 if (!data.TryGetProperty("messageTimestamp", out var tsElement))
                     return null;
 
                 var timestamp = ReadUnixTimestamp(tsElement);
-
-                //var timestamp = data.GetProperty("messageTimestamp").GetInt64();
                 var createdUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
 
                 // =========================
@@ -608,13 +642,11 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 // =========================
                 // Mensaje
                 // =========================
-                // messageType (NO siempre viene)
                 var messageType =
                     data.TryGetProperty("messageType", out var mt) ? mt.GetString() :
                     data.TryGetProperty("type", out var t) ? t.GetString() :
                     "unknown";
 
-                // message (NO siempre viene)
                 if (!data.TryGetProperty("message", out var message))
                 {
                     _log.LogWarning("Payload without message node");
@@ -633,13 +665,11 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 string? fileEncSha256 = null;
                 string? directPath = null;
                 long? mediaKeyTimestamp = null;
-
                 string? fileName = null;
                 long? fileLength = null;
                 int? pageCount = null;
                 string? thumbnailBase64 = null;
                 string? mediaType = null;
-
 
                 switch (messageType)
                 {
@@ -653,76 +683,53 @@ namespace crmchapultepec.Components.EvolutionWebhook
                         {
                             messageKind = MessageKind.Image;
                             mediaType = "image";
-
                             var img = message.GetProperty("imageMessage");
-
                             mediaUrl = img.GetProperty("url").GetString();
                             mediaMime = img.GetProperty("mimetype").GetString();
                             mediaCaption = img.TryGetProperty("caption", out var ic) ? ic.GetString() : null;
-
                             mediaKey = img.GetProperty("mediaKey").GetString();
                             fileSha256 = img.GetProperty("fileSha256").GetString();
                             fileEncSha256 = img.GetProperty("fileEncSha256").GetString();
                             directPath = img.GetProperty("directPath").GetString();
-                            mediaKeyTimestamp = img.TryGetProperty("mediaKeyTimestamp", out var mts)
-                                ? mts.GetInt64()
-                                : null;
-
+                            mediaKeyTimestamp = img.TryGetProperty("mediaKeyTimestamp", out var mts) ? mts.GetInt64() : null;
                             fileLength = img.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : null;
                             thumbnailBase64 = img.TryGetProperty("jpegThumbnail", out var jt) ? jt.GetString() : null;
-
                             textPreview = "[Imagen]";
                             break;
                         }
-
 
                     case "audioMessage":
                         {
                             messageKind = MessageKind.Audio;
                             mediaType = "audio";
-
                             var aud = message.GetProperty("audioMessage");
-
                             mediaUrl = aud.GetProperty("url").GetString();
                             mediaMime = aud.GetProperty("mimetype").GetString();
-
                             mediaKey = aud.GetProperty("mediaKey").GetString();
                             fileSha256 = aud.GetProperty("fileSha256").GetString();
                             fileEncSha256 = aud.GetProperty("fileEncSha256").GetString();
                             directPath = aud.GetProperty("directPath").GetString();
-                            mediaKeyTimestamp = aud.TryGetProperty("mediaKeyTimestamp", out var mts)
-                                ? mts.GetInt64()
-                                : null;
-
+                            mediaKeyTimestamp = aud.TryGetProperty("mediaKeyTimestamp", out var mts) ? mts.GetInt64() : null;
                             fileLength = aud.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : null;
-
                             textPreview = "[Audio]";
                             break;
                         }
-
 
                     case "documentMessage":
                         {
                             messageKind = MessageKind.Document;
                             mediaType = "document";
-
                             var docu = message.GetProperty("documentMessage");
-
                             mediaUrl = docu.GetProperty("url").GetString();
                             mediaMime = docu.GetProperty("mimetype").GetString();
                             mediaCaption = docu.TryGetProperty("title", out var title) ? title.GetString() : null;
-
                             mediaKey = docu.TryGetProperty("mediaKey", out var mk) ? mk.GetString() : null;
                             fileSha256 = docu.TryGetProperty("fileSha256", out var fsh) ? fsh.GetString() : null;
                             fileEncSha256 = docu.TryGetProperty("fileEncSha256", out var feh) ? feh.GetString() : null;
                             directPath = docu.TryGetProperty("directPath", out var dp) ? dp.GetString() : null;
-                                                       
                             if (docu.TryGetProperty("mediaKeyTimestamp", out var mts))
                                 mediaKeyTimestamp = ReadUnixTimestamp(mts);
-
                             fileName = docu.TryGetProperty("fileName", out var fn) ? fn.GetString() : null;
-
-                            //  fileLength VIENE COMO STRING
                             if (docu.TryGetProperty("fileLength", out var fl))
                             {
                                 if (fl.ValueKind == JsonValueKind.String && long.TryParse(fl.GetString(), out var len))
@@ -730,35 +737,23 @@ namespace crmchapultepec.Components.EvolutionWebhook
                                 else if (fl.ValueKind == JsonValueKind.Number)
                                     fileLength = fl.GetInt64();
                             }
-
-                            pageCount = docu.TryGetProperty("pageCount", out var pc) && pc.ValueKind == JsonValueKind.Number
-                                ? pc.GetInt32()
-                                : null;
-
+                            pageCount = docu.TryGetProperty("pageCount", out var pc) && pc.ValueKind == JsonValueKind.Number ? pc.GetInt32() : null;
                             thumbnailBase64 = docu.TryGetProperty("jpegThumbnail", out var jt) ? jt.GetString() : null;
-
                             textPreview = "[Documento]";
                             break;
                         }
 
-
-
                     case "stickerMessage":
                         {
-                            messageKind = MessageKind.Sticker; // Asegúrate de que tu Enum tenga Sticker
+                            messageKind = MessageKind.Sticker;
                             mediaType = "sticker";
-
                             var stk = message.GetProperty("stickerMessage");
-
-                            // Propiedades básicas (Strings directos)
                             mediaUrl = stk.TryGetProperty("url", out var url) ? url.GetString() : null;
                             mediaMime = stk.TryGetProperty("mimetype", out var mime) ? mime.GetString() : "image/webp";
                             mediaKey = stk.TryGetProperty("mediaKey", out var mk) ? mk.GetString() : null;
                             fileSha256 = stk.TryGetProperty("fileSha256", out var fsh) ? fsh.GetString() : null;
                             fileEncSha256 = stk.TryGetProperty("fileEncSha256", out var feh) ? feh.GetString() : null;
                             directPath = stk.TryGetProperty("directPath", out var dp) ? dp.GetString() : null;
-
-                            // mediaKeyTimestamp (Manejo de String o Number)
                             if (stk.TryGetProperty("mediaKeyTimestamp", out var mts))
                             {
                                 if (mts.ValueKind == JsonValueKind.String && long.TryParse(mts.GetString(), out var ts))
@@ -766,8 +761,6 @@ namespace crmchapultepec.Components.EvolutionWebhook
                                 else if (mts.ValueKind == JsonValueKind.Number)
                                     mediaKeyTimestamp = mts.GetInt64();
                             }
-
-                            // fileLength (Manejo de String o Number)
                             if (stk.TryGetProperty("fileLength", out var fl))
                             {
                                 if (fl.ValueKind == JsonValueKind.String && long.TryParse(fl.GetString(), out var len))
@@ -775,13 +768,10 @@ namespace crmchapultepec.Components.EvolutionWebhook
                                 else if (fl.ValueKind == JsonValueKind.Number)
                                     fileLength = fl.GetInt64();
                             }
-
-                            // stickers no suelen tener texto/caption
                             mediaCaption = null;
                             textPreview = "[Sticker]";
                             break;
                         }
-
 
                     default:
                         messageKind = MessageKind.Text;
@@ -798,7 +788,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     BusinessAccountId = instance,
 
                     Sender = senderRoot ?? remoteJid,
-                    CustomerPhone = remoteJid.Replace("@s.whatsapp.net", ""),
+                    CustomerPhone = customerPhone, // 🚩 Número real extraído
                     CustomerDisplayName = pushName,
                     DirectionIn = !fromMe,
                     MessageKind = messageKind,
