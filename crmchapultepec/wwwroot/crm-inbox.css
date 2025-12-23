@@ -2265,3 +2265,25 @@ btn.btn-brand.btn-brand-primary:hover,
         text-align: center;
     }
 }
+
+
+/* Contenedor sin fondo ni bordes */
+.msg-media--sticker {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    display: flex;
+    justify-content: center;
+    padding: 0 !important;
+}
+
+/* La imagen del sticker */
+.msg-sticker-render {
+    width: 150px;
+    height: 150px;
+    object-fit: contain;
+    /* Evita que se vea borroso si es pequeño */
+    image-rendering: auto;
+    /* Previene el menú contextual de "Guardar imagen como" en algunos navegadores */
+    pointer-events: none;
+}

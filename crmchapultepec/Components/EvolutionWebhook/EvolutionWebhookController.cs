@@ -810,7 +810,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 // =========================
                 return new EvolutionMessageSnapshotDto
                 {
-                    ThreadId = $"{instance}:{remoteJid}",
+                    ThreadId = $"{instance}:{targetJidForPhone}",
                     BusinessAccountId = instance,
 
                     Sender = senderRoot ?? remoteJid,

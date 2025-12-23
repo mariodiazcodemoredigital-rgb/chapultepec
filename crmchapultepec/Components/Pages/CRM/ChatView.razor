@@ -55,6 +55,8 @@ else
                 var isMine = !m.DirectionIn;
                 var rowClass = isMine ? "crm-inbox__msg-row crm-inbox__msg-row--right" : "crm-inbox__msg-row";
                 var bubbleClass = isMine ? "crm-inbox__bubble crm-inbox__bubble--out" : "crm-inbox__bubble crm-inbox__bubble--in";
+                // Si es sticker, quitamos la clase de la burbuja para que no tenga fondo/borde
+                var isSticker = (MessageKind)m.MessageKind == MessageKind.Sticker;
 
                 <div class="@rowClass">
                     @if (!isMine)
@@ -65,21 +67,19 @@ else
                     }
                     <div class="msg">
                         <div class="@bubbleClass">
-                            @if ((MessageKind)m.MessageKind == MessageKind.Sticker)
+                            @* 1. Prioridad: Medias Desencriptados por ID (Stickers e Imágenes locales) *@
+                            @if (isSticker)
                             {
-                                <div class="msg-sticker">
-                                    @*  Buscamos el ID en tu tabla de Medias relacionado a este mensaje *@
-                                    <img src="/api/webhook/evolution/view-sticker/@m.Id"
-                                         style="width: 150px; height: 150px; object-fit: contain;"
-                                         alt="Sticker" />
-                                </div>
+                                <img src="/api/webhook/evolution/view-sticker/@m.Id"
+                                     style="width: 150px; height: 150px; object-fit: contain; pointer-events: none;"
+                                     alt="Sticker" />
                             }
-                            else if ((MessageKind)m.MessageKind == MessageKind.Image)
+                            else if ((MessageKind)m.MessageKind == MessageKind.Image && m.Id > 0)
                             {
-                                <img src="/api/webhook/evolution/download/@m.Id" class="msg-thumb" />
+                                <img src="/api/webhook/evolution/download/@m.Id" class="msg-thumb" loading="lazy" />
                             }
-
-                            @if (!string.IsNullOrWhiteSpace(m.MediaUrl))
+                            @* 2. Fallback: Medias por URL directa (Solo si no es sticker/imagen ya procesada) *@
+                            else if (!string.IsNullOrWhiteSpace(m.MediaUrl))
                             {
                                 <div class="msg-media">
                                     @if (IsImage(m.MediaMime))
@@ -98,6 +98,7 @@ else
                                 </div>
                             }
 
+                            @* 3. Texto del mensaje *@
                             @if (!string.IsNullOrWhiteSpace(m.Text))
                             {
                                @m.Text
