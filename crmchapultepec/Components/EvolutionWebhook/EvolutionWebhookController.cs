@@ -798,6 +798,23 @@ namespace crmchapultepec.Components.EvolutionWebhook
                             textPreview = "[Sticker]";
                             break;
                         }
+                    case "reactionMessage":
+                        {
+                            messageKind = MessageKind.Text; // O puedes crear MessageKind.Reaction si prefieres
+                            var reaction = message.GetProperty("reactionMessage");
+
+                            // El emoji enviado
+                            text = reaction.TryGetProperty("text", out var emoji) ? emoji.GetString() : "";
+
+                            // ID del mensaje al que se reacciona (útil para mostrarlo en la burbuja correcta)
+                            var targetMessageId = reaction.GetProperty("key").GetProperty("id").GetString();
+
+                            textPreview = $"Reaccionó {text} a un mensaje";
+
+                            // Opcional: Puedes guardar el ID del mensaje original en una columna de "Notas" 
+                            // o "ReplyTo" si tu tabla lo permite.
+                            break;
+                        }
 
                     default:
                         messageKind = MessageKind.Text;
@@ -987,6 +1004,37 @@ namespace crmchapultepec.Components.EvolutionWebhook
             await using var db = await dbFactory.CreateDbContextAsync(ct);
 
             var thread = await GetOrCreateThreadAsync(snap, ct);
+
+            // LÓGICA DE REACCIONES A LOS MENSAJES
+            if (snap.MessageType == "reactionMessage")
+            {
+                // 1. Extraer el ID del mensaje al que se reacciona
+                using var doc = JsonDocument.Parse(snap.RawPayloadJson);
+                var reactionNode = doc.RootElement.GetProperty("data").GetProperty("message").GetProperty("reactionMessage");
+                var targetExternalId = reactionNode.GetProperty("key").GetProperty("id").GetString();
+                var emoji = reactionNode.TryGetProperty("text", out var textProp) ? textProp.GetString() : "";
+
+                // 2. Buscar el mensaje original en la base de datos
+                // Usamos ExternalId o WaMessageId según como lo guardes
+                var originalMessage = await db.CrmMessages
+                    .FirstOrDefaultAsync(m => m.ExternalId == targetExternalId && m.ThreadRefId == thread.Id, ct);
+
+                if (originalMessage != null)
+                {
+                    // 3. Actualizar la reacción (si es un string vacío "" significa que quitaron la reacción)
+                    originalMessage.Reaction = string.IsNullOrEmpty(emoji) ? null : emoji;
+
+                    // 4. Actualizar el thread para que la lista muestre el preview de la reacción
+                    thread.LastMessageUtc = DateTime.UtcNow;
+                    thread.LastMessagePreview = $"Reaccionó {emoji}";
+
+                    await db.SaveChangesAsync(ct);
+
+                    // 5. Notificar a SignalR (Enviamos el mensaje original actualizado)
+                    await NotifySignalRAsync(thread, originalMessage);
+                }
+                return; // Salimos para no insertar un mensaje nuevo
+            }
 
             if (await MessageExistsAsync(snap, thread.Id, ct))
                 return;

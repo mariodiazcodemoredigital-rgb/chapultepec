@@ -2287,3 +2287,26 @@ btn.btn-brand.btn-brand-primary:hover,
     /* Previene el menú contextual de "Guardar imagen como" en algunos navegadores */
     pointer-events: none;
 }
+
+/*Reactions*/
+.msg-reaction-badge {
+    position: absolute;
+    bottom: -12px;
+    right: 8px;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 2px 5px;
+    font-size: 13px;
+    line-height: 1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    z-index: 5;
+    cursor: default;
+    user-select: none;
+}
+
+/* Si el mensaje es de la derecha (mío), movemos la reacción a la izquierda */
+.crm-inbox__bubble--out .msg-reaction-badge {
+    right: auto;
+    left: 8px;
+}
