@@ -80,11 +80,20 @@ namespace crmchapultepec.Components.EvolutionWebhook
             var mime = media.MediaType switch
             {
                 "image" => "image/jpeg",
+                "sticker" => "image/webp",
                 "document" => "application/pdf",
                 "audio" => "audio/mpeg",
                 _ => "application/octet-stream"
             };
 
+            // Si es imagen o sticker, lo enviamos SIN el nombre del archivo 
+            // para que el navegador lo renderice en el <img>
+            if (media.MediaType == "image" || media.MediaType == "sticker")
+            {
+                return File(bytes, mime);
+            }
+
+            // Para documentos, mantenemos la descarga
             return File(bytes, mime, media.FileName);
         }
 

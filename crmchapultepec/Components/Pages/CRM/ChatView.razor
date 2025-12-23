@@ -65,6 +65,20 @@ else
                     }
                     <div class="msg">
                         <div class="@bubbleClass">
+                            @if ((MessageKind)m.MessageKind == MessageKind.Sticker)
+                            {
+                                <div class="msg-sticker">
+                                    @*  Buscamos el ID en tu tabla de Medias relacionado a este mensaje *@
+                                    <img src="/api/webhook/evolution/download/@m.Id"
+                                         style="width: 150px; height: 150px; object-fit: contain;"
+                                         alt="Sticker" />
+                                </div>
+                            }
+                            else if ((MessageKind)m.MessageKind == MessageKind.Image)
+                            {
+                                <img src="/api/webhook/evolution/download/@m.Id" class="msg-thumb" />
+                            }
+
                             @if (!string.IsNullOrWhiteSpace(m.MediaUrl))
                             {
                                 <div class="msg-media">
