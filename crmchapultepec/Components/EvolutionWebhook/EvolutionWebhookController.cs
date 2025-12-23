@@ -224,6 +224,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 JsonElement dataElem = root.TryGetProperty("data", out var d) ? d : root;
 
                 string? remoteJid = null;
+                string? senderPn = null;
                 string? pushName = null;
                 string? messageText = null;
                 string? externalMessageId = null;
@@ -235,6 +236,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     if (key.TryGetProperty("remoteJid", out var rj)) remoteJid = rj.GetString();
                     if (key.TryGetProperty("id", out var id)) externalMessageId = id.GetString();
                     if (key.TryGetProperty("fromMe", out var fm)) fromMe = fm.GetBoolean();
+                    if (key.TryGetProperty("senderPn", out var spn)) senderPn = spn.GetString();
                 }
 
                 if (root.TryGetProperty("pushName", out var pn))
@@ -252,9 +254,22 @@ namespace crmchapultepec.Components.EvolutionWebhook
                         messageText = t.GetString();
                 }
 
-                var phone = remoteJid?
+                // 2. LÓGICA DE EXTRACCIÓN DEL NÚMERO (Tu validación)
+                // Buscamos en orden de prioridad el que contenga "@s.whatsapp.net"
+                string? targetJid = null;
+
+                if (remoteJid != null && remoteJid.Contains("@s.whatsapp.net"))
+                    targetJid = remoteJid;
+                else if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
+                    targetJid = senderPn;
+                else
+                    targetJid = remoteJid; // Fallback al que sea que tengamos (podría ser el @lid)
+
+                // Limpiar para obtener solo los dígitos
+                var phone = targetJid?
                     .Replace("@s.whatsapp.net", "")
-                    .Replace("@lid", "");
+                    .Replace("@lid", "")
+                    .Replace("@c.us", "");
 
                 var threadId = $"wa:{phone}";
 
