@@ -15,7 +15,7 @@
 
 <div class="@ContainerClass">
 
-    <button class="btn btn-warning" @onclick="TestSignalR">Probar SignalR Local</button>
+  
 
     <div class="crm-inbox__panel crm-inbox__panel--visible crm-inbox__panel--col1 crm-inbox__sidebar">
         <InboxSidebar Selected="@Selected" OnSelect="ChangeFilter" NewConversation="NewConversation" />
@@ -64,24 +64,7 @@
     private const string CurrentUser = "you";
     private HubConnection? hubConnection;
 
-    private async Task TestSignalR()
-    {
-        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
-        {
-            // Simulamos lo que hace el servidor: enviamos al grupo un mensaje de prueba
-            // Usamos el método 'SendToGroup' que tienes en tu CrmHub
-            await hubConnection.InvokeAsync("SendToGroup", "ChapultepecEvo", "NewMessage", new
-            {
-                threadId = "test",
-                text = "Prueba de conexión local"
-            });
-            Console.WriteLine("Prueba enviada al hub...");
-        }
-        else
-        {
-            Console.WriteLine($"Hub no conectado. Estado: {hubConnection?.State}");
-        }
-    }
+  
 
     protected override async Task OnInitializedAsync()
     {
