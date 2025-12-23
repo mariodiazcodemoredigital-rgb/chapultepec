@@ -12,5 +12,15 @@ namespace crmchapultepec.services.Hubs
         // puedes añadir métodos para que clientes llamen, por ejemplo:
         public Task SendToGroup(string group, string method, object payload)
             => Clients.Group(group).SendAsync(method, payload);
+
+        // Método para que el cliente se una a su grupo de negocio
+        public async Task JoinGroup(string businessAccountId)
+        {
+            if (!string.IsNullOrEmpty(businessAccountId))
+            {
+                await Groups.AddToGroupAsync(Context.ConnectionId, businessAccountId);
+                Console.WriteLine($"Cliente {Context.ConnectionId} unido al grupo: {businessAccountId}");
+            }
+        }
     }
 }

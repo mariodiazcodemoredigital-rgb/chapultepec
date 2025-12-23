@@ -15,6 +15,8 @@
 
 <div class="@ContainerClass">
 
+    <button class="btn btn-warning" @onclick="TestSignalR">Probar SignalR Local</button>
+
     <div class="crm-inbox__panel crm-inbox__panel--visible crm-inbox__panel--col1 crm-inbox__sidebar">
         <InboxSidebar Selected="@Selected" OnSelect="ChangeFilter" NewConversation="NewConversation" />
     </div>
@@ -62,6 +64,25 @@
     private const string CurrentUser = "you";
     private HubConnection? hubConnection;
 
+    private async Task TestSignalR()
+    {
+        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+        {
+            // Simulamos lo que hace el servidor: enviamos al grupo un mensaje de prueba
+            // Usamos el método 'SendToGroup' que tienes en tu CrmHub
+            await hubConnection.InvokeAsync("SendToGroup", "ChapultepecEvo", "NewMessage", new
+            {
+                threadId = "test",
+                text = "Prueba de conexión local"
+            });
+            Console.WriteLine("Prueba enviada al hub...");
+        }
+        else
+        {
+            Console.WriteLine($"Hub no conectado. Estado: {hubConnection?.State}");
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         // 1. Suscribirse al evento de cambios
@@ -84,12 +105,21 @@
 
                 hubConnection.On<dynamic>("NewMessage", async (data) =>
                 {
+                    // Para depurar: verás el aviso en la consola del navegador
+                    Console.WriteLine("¡Llegó notificación de SignalR!");
                     OnInboxChanged();
-                    await InvokeAsync(StateHasChanged);
+                   // await InvokeAsync(StateHasChanged);
                 });
 
                 await hubConnection.StartAsync();
                 Console.WriteLine("SignalR conectado exitosamente.");
+
+                // 🔴 PASO CLAVE: Unirse al grupo.
+                // Aquí debes pasar el ID de tu instancia (ej. "ChapultepecEvo")
+                // Si lo tienes dinámico en el usuario, úsalo. Si no, por ahora hardcode para probar:
+                await hubConnection.InvokeAsync("JoinGroup", "ChapultepecEvo");
+
+                Console.WriteLine("SignalR conectado y unido al grupo.");
             }
             catch (Exception ex)
             {
@@ -104,43 +134,53 @@
 
     private async void OnInboxChanged()
     {
+        // Usamos InvokeAsync porque este evento viene de un hilo externo (SignalR)
         await InvokeAsync(async () =>
         {
             _debounceCts?.Cancel();
             _debounceCts = new CancellationTokenSource();
-            var token = _debounceCts.Token;
 
             try
             {
-                await Task.Delay(500, token);
+                await Task.Delay(300, _debounceCts.Token); // Un pequeño delay para esperar a que la DB termine de escribir
             }
             catch (TaskCanceledException) { return; }
 
             if (_reloading) return;
             _reloading = true;
+
             try
             {
-                // Recargamos lista de la izquierda
-                await LoadThreadsAsync();
+                // 1. Recargar la lista de hilos (La columna de la izquierda)
+                // Esto actualizará los previews y los contadores de no leídos
+                Threads = await Inbox.GetThreadsAsync(Selected, SearchText);
 
-                // Si tenemos el chat abierto, lo refrescamos para ver el nuevo mensaje
+                // 2. Si el chat que tenemos abierto es el que recibió el mensaje, lo refrescamos
                 if (SelectedThreadId != null)
                 {
                     var updatedThread = await Inbox.GetThreadAsync(SelectedThreadId);
                     if (updatedThread != null)
                     {
-                        // Actualizamos la vista del chat
                         SelectedThread = updatedThread;
 
-                        // Si el usuario ya lo está viendo, marcamos como leído de nuevo
+                        // 3. Si lo estamos viendo, lo marcamos como leído en la DB
                         if (_mobileShowChat || SelectedThreadId == updatedThread.ThreadId)
                         {
                             await Inbox.MarkReadAsync(SelectedThreadId);
+                            SelectedThread.UnreadCount = 0;
                         }
                     }
                 }
             }
-            finally { _reloading = false; StateHasChanged(); }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error recargando datos: {ex.Message}");
+            }
+            finally
+            {
+                _reloading = false;
+                StateHasChanged(); // Forzar a Blazor a re-renderizar la UI
+            }
         });
     }
 
@@ -169,7 +209,7 @@
             if (SelectedThreadId is not null)
             {
                 // Solo cargamos si no tenemos ya uno cargado o si queremos refrescar al inicio
-                // SelectedThread = await Inbox.GetThreadAsync(SelectedThreadId);
+                SelectedThread = await Inbox.GetThreadAsync(SelectedThreadId);
             }
         }
         finally

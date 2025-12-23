@@ -926,8 +926,11 @@ namespace crmchapultepec.Components.EvolutionWebhook
             if (string.IsNullOrEmpty(thread.BusinessAccountId))
                 return;
 
+            // Si en el log ves que llega vacío o diferente, ahí está el error.
+            var grupoDestino = thread.BusinessAccountId ?? "ChapultepecEvo";
+
             await _hubContext.Clients
-                .Group(thread.BusinessAccountId)
+                .Group(grupoDestino)
                 .SendAsync("NewMessage", new
                 {
 
