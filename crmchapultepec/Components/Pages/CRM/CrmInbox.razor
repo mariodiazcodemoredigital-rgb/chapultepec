@@ -1,0 +1,278 @@
+﻿@page "/crminbox"
+@using Microsoft.AspNetCore.SignalR.Client
+@using crmchapultepec.data.Repositories.CRM
+@using crmchapultepec.entities.EvolutionWebhook
+@using crmchapultepec.entities.Entities.CRM
+@using crmchapultepec.services.Implementation.CRM
+
+@inject CRMInboxService Inbox
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+@rendermode InteractiveServer
+
+<input id="ls-toggle" type="checkbox" class="ls-toggle" hidden />
+
+<div class="@ContainerClass">
+
+    <div class="crm-inbox__panel crm-inbox__panel--visible crm-inbox__panel--col1 crm-inbox__sidebar">
+        <InboxSidebar Selected="@Selected" OnSelect="ChangeFilter" NewConversation="NewConversation" />
+    </div>
+
+    <div class="crm-inbox__panel crm-inbox__panel--headered crm-inbox__panel--visible crm-inbox__panel--col2">
+        @if (_loading)
+        {
+            <div class="crm-inbox__loading">Cargando conversaciones…</div>
+        }
+        else
+        {
+            <ThreadList Threads="@Threads" SelectedId="@SelectedThreadId" Selected="@Selected"
+                        OnSelect="SelectThread" OnSearchChanged="SearchChanged" OnFilterChange="ChangeFilter" />
+        }
+    </div>
+
+    <div class="crm-inbox__panel crm-inbox__panel--visible crm-inbox__panel--col3">
+        @if (_loadingChat)
+        {
+            <div class="crm-inbox__loading">Cargando chat…</div>
+        }
+        else
+        {
+            <ChatView Thread="@SelectedThread" OnSend="SendMessage" OnAssignToMe="AssignToMe"
+                      ShowBackButton="true" OnBack="BackToList" CurrentUser="@CurrentUser"
+                      OnContactUpdated="HandleContactUpdated" />
+        }
+    </div>
+</div>
+
+@code {
+    private InboxFilter Selected = InboxFilter.Todos;
+    private string? SelectedThreadId;
+    private string? SearchText;
+
+    private IReadOnlyList<CrmThread> Threads = Array.Empty<CrmThread>();
+    private CrmThread? SelectedThread;
+
+    private bool _loading;
+    private bool _loadingChat;
+
+    private bool _mobileShowChat = false;
+    private string ContainerClass => $"crm-inbox {(_mobileShowChat ? "crm-inbox--mobile-chat" : "crm-inbox--mobile-list")}";
+
+    private const string CurrentUser = "you";
+    private HubConnection? hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 1. Suscribirse al evento de cambios
+        Inbox.Changed += OnInboxChanged;
+
+        // 2. Cargar datos iniciales
+        await LoadThreadsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                hubConnection = new HubConnectionBuilder()
+                    .WithUrl(Nav.ToAbsoluteUri("/crmHub"))
+                    .WithAutomaticReconnect()
+                    .Build();
+
+                hubConnection.On<dynamic>("NewMessage", async (data) =>
+                {
+                    OnInboxChanged();
+                    await InvokeAsync(StateHasChanged);
+                });
+
+                await hubConnection.StartAsync();
+                Console.WriteLine("SignalR conectado exitosamente.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error conectando a SignalR: {ex.Message}");
+            }
+        }
+    }
+
+    // Debounce para evitar recargas masivas
+    CancellationTokenSource? _debounceCts;
+    bool _reloading;
+
+    private async void OnInboxChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            _debounceCts?.Cancel();
+            _debounceCts = new CancellationTokenSource();
+            var token = _debounceCts.Token;
+
+            try
+            {
+                await Task.Delay(500, token);
+            }
+            catch (TaskCanceledException) { return; }
+
+            if (_reloading) return;
+            _reloading = true;
+            try
+            {
+                // Recargamos lista de la izquierda
+                await LoadThreadsAsync();
+
+                // Si tenemos el chat abierto, lo refrescamos para ver el nuevo mensaje
+                if (SelectedThreadId != null)
+                {
+                    var updatedThread = await Inbox.GetThreadAsync(SelectedThreadId);
+                    if (updatedThread != null)
+                    {
+                        // Actualizamos la vista del chat
+                        SelectedThread = updatedThread;
+
+                        // Si el usuario ya lo está viendo, marcamos como leído de nuevo
+                        if (_mobileShowChat || SelectedThreadId == updatedThread.ThreadId)
+                        {
+                            await Inbox.MarkReadAsync(SelectedThreadId);
+                        }
+                    }
+                }
+            }
+            finally { _reloading = false; StateHasChanged(); }
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Desuscribir evento C#
+        Inbox.Changed -= OnInboxChanged;
+
+        // Desconectar SignalR
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+    private async Task LoadThreadsAsync()
+    {
+        _loading = true; StateHasChanged();
+        try
+        {
+            Threads = await Inbox.GetThreadsAsync(Selected, SearchText);
+
+            if (SelectedThreadId is null || !Threads.Any(t => t.ThreadId == SelectedThreadId))
+                SelectedThreadId = Threads.FirstOrDefault()?.ThreadId;
+
+            if (SelectedThreadId is not null)
+            {
+                // Solo cargamos si no tenemos ya uno cargado o si queremos refrescar al inicio
+                // SelectedThread = await Inbox.GetThreadAsync(SelectedThreadId);
+            }
+        }
+        finally
+        {
+            _loading = false; StateHasChanged();
+        }
+    }
+
+    private async Task ChangeFilter(InboxFilter f)
+    {
+        Selected = f;
+        SelectedThreadId = null;
+        _mobileShowChat = false;
+        await LoadThreadsAsync();
+    }
+
+    private async Task SelectThread(string id)
+    {
+        _loadingChat = true;
+        StateHasChanged();
+
+        try
+        {
+            SelectedThreadId = id;
+            SelectedThread = await Inbox.GetThreadAsync(id);
+            _mobileShowChat = true;
+
+            if (SelectedThread != null && SelectedThread.UnreadCount > 0)
+            {
+                await Inbox.MarkReadAsync(id);
+                SelectedThread.UnreadCount = 0;
+            }
+        }
+        finally
+        {
+            _loadingChat = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SearchChanged(string text)
+    {
+        SearchText = string.IsNullOrWhiteSpace(text) ? null : text;
+        SelectedThreadId = null;
+        _mobileShowChat = false;
+        await LoadThreadsAsync();
+    }
+
+    private Task NewConversation() => Task.CompletedTask;
+
+    private async Task AssignToMe()
+    {
+        if (SelectedThread is null) return;
+
+        await Inbox.AssignAsync(SelectedThread.ThreadId, CurrentUser);
+
+        // Refresco local rápido
+        SelectedThread.AssignedTo = CurrentUser;
+        var item = Threads.FirstOrDefault(x => x.ThreadId == SelectedThread.ThreadId);
+        if (item != null) item.AssignedTo = CurrentUser;
+
+        StateHasChanged();
+    }
+
+    private async Task SendMessage(string text)
+    {
+        if (SelectedThread is null || string.IsNullOrWhiteSpace(text)) return;
+
+        // ✅ USAMOS EL MÉTODO NUEVO SIMPLIFICADO DEL REPOSITORIO
+        await Inbox.AppendAgentMessageAsync(SelectedThread.ThreadId, text, CurrentUser);
+
+        // Recargamos el hilo para ver el mensaje enviado inmediatamente
+        SelectedThread = await Inbox.GetThreadAsync(SelectedThread.ThreadId);
+        StateHasChanged();
+    }
+
+    private Task BackToList()
+    {
+        _mobileShowChat = false;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleContactUpdated(ChatView.ContactChangedArgs e)
+    {
+        if (SelectedThread != null && SelectedThread.ThreadId == e.ThreadId)
+        {
+            SelectedThread.CustomerDisplayName = e.Name;
+            SelectedThread.CustomerPhone = e.Phone;
+            SelectedThread.CustomerEmail = e.Email;
+            SelectedThread.CompanyId = e.Company;
+        }
+
+        var item = Threads.FirstOrDefault(t => t.ThreadId == e.ThreadId);
+        if (item != null)
+        {
+            item.CustomerDisplayName = e.Name;
+            item.CustomerPhone = e.Phone;
+            item.CustomerEmail = e.Email;
+            item.CompanyId = e.Company;
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+}

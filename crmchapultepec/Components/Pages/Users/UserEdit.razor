@@ -1,0 +1,325 @@
+﻿@page "/users/edit/{Id}"
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Authorization
+@using crmchapultepec.data.Data
+@using crmchapultepec.services.Interfaces.UsersService
+
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject IUsersService UsersService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h3>Editar usuario</h3>
+
+@if (_loading)
+{
+    <div class="card p-4" style="min-height:260px; display:flex; align-items:center; justify-content:center;">
+        <div style="text-align:center">
+            <div class="spinner-border" role="status"></div>
+            <div style="margin-top:10px">Cargando datos…</div>
+        </div>
+    </div>
+}
+else if (_noPermitido)
+{
+    <div class="alert alert-warning mb-3">No tienes permisos para editar este usuario.</div>
+    <button class="btn btn-secondary" @onclick="Volver">Regresar</button>
+}
+else if (model is null)
+{
+    <div class="alert alert-danger mb-3">No se encontró el usuario solicitado.</div>
+    <button class="btn btn-secondary" @onclick="Volver">Regresar</button>
+}
+else
+{
+    <div style="max-width:720px">
+        <div class="mb-3">
+            <label class="form-label">Nombre completo</label>
+            <input class="form-control" @bind="model.FullName" disabled="@_soloLectura" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Nombre de Usuario</label>
+            <input class="form-control" @bind="model.UserName" disabled="@_soloLectura" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input class="form-control" type="email" @bind="model.Email" disabled="@_soloLectura" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Teléfono</label>
+            <input class="form-control" @bind="model.PhoneNumber" disabled="@_soloLectura" />
+        </div>
+
+        <div class="form-check mb-3">
+            <input class="form-check-input" id="chkActivo" type="checkbox"
+                   @bind="model.IsActive" disabled="@(_soloLectura || _bloquearActivo)" />
+            <label class="form-check-label" for="chkActivo">Activo</label>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-brand btn-brand-success" @onclick="Guardar" disabled="@(_guardando || _soloLectura)">Guardar</button>
+            <button class="btn btn-brand btn-brand-danger" @onclick="Volver" disabled="@_guardando">Cancelar</button>
+        </div>
+    </div>
+}
+
+@code {
+    private const string USER_PRINCIPAL = "mdiaz";
+    private const string ROL_ADMIN_SECUNDARIO = "Administrador Secundario";
+    private const string ROL_USUARIO_SISTEMA = "Usuario Sistema";
+
+    [Parameter] public string? Id { get; set; }
+
+    private UserEditModel? model;
+    private ApplicationUser? usuarioObjetivo;
+
+    // Estado general
+    private bool _loading = true;
+    private bool _guardando = false;
+    private bool _noPermitido = false;
+    private bool _soloLectura = true;     // si no puede editar, el formulario queda solo lectura
+    private bool _bloquearActivo = false; // reglas específicas para Activo
+    private bool _loadedOnce;             // bandera para ejecutar una sola vez tras primer render
+
+    // Usuario logueado
+    private string? currentUserId;
+    private string? currentUserName;
+    private bool EsPrincipalLogueado => string.Equals(currentUserName, USER_PRINCIPAL, StringComparison.OrdinalIgnoreCase);
+    private bool EsAdminSecundarioLogueado { get; set; }
+    private bool EsUsuarioSistema { get; set; }
+
+    // ---------- Carga DESPUÉS del primer render, como en /users/new ----------
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _loadedOnce) return;
+        _loadedOnce = true;
+
+        _loading = true;
+
+        // 1) Quién soy
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var cp = auth.User;
+        currentUserId = cp.FindFirstValue(ClaimTypes.NameIdentifier);
+        currentUserName = cp.Identity?.Name;
+
+        if (!string.IsNullOrWhiteSpace(currentUserId))
+        {
+            var rolesLog = await UsersService.ObtenerRolesDeUsuarioAsync(currentUserId);
+            EsAdminSecundarioLogueado = rolesLog?.Contains(ROL_ADMIN_SECUNDARIO) == true;
+            EsUsuarioSistema = rolesLog?.Contains(ROL_USUARIO_SISTEMA) == true;
+        }
+
+        // 2) Usuario objetivo
+        usuarioObjetivo = string.IsNullOrWhiteSpace(Id)
+            ? null
+            : await UsersService.ObtenerUsuarioPorIdAsync(Id);
+
+        if (usuarioObjetivo is null)
+        {
+            model = null;
+            _noPermitido = false; // mostrará "no encontrado"
+            _loading = false;
+            StateHasChanged();
+            return;
+        }
+
+        // 3) Reglas de permiso (idénticas al grid)
+        var puedeVerAcciones = PuedeVerAcciones(usuarioObjetivo);
+        var puedeEditar = PuedeEditar(usuarioObjetivo);
+        _noPermitido = !puedeVerAcciones;
+        _soloLectura = !puedeEditar;
+
+        // 4) Reglas extra para el flag Activo: que un secundario no se desactive a sí mismo
+        _bloquearActivo = EsAdminSecundarioLogueado && usuarioObjetivo.Id == currentUserId;
+
+        // 5) Map a modelo de edición
+        model = new UserEditModel
+        {
+            Id = usuarioObjetivo.Id,
+            FullName = usuarioObjetivo.FullName,
+            UserName = usuarioObjetivo.UserName,
+            Email = usuarioObjetivo.Email,
+            PhoneNumber = usuarioObjetivo.PhoneNumber,
+            // Activo si NO está bloqueado
+            IsActive = usuarioObjetivo.LockoutEnd is null
+        };
+
+        _loading = false;
+        StateHasChanged(); // refresco único tras cargar
+    }
+
+    private async Task Guardar()
+    {
+        if (model is null) return;
+
+        // -------- Validación manual (como en users/new) --------
+        if (string.IsNullOrWhiteSpace(model.FullName)
+            || string.IsNullOrWhiteSpace(model.UserName)
+            || string.IsNullOrWhiteSpace(model.Email))
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "warning",
+                title = "Campos requeridos",
+                html = "Completa Nombre, Usuario y Email.",
+                confirmButtonText = "OK",
+                target = "body"
+            });
+            return;
+        }
+
+        if (_soloLectura)
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "warning",
+                title = "Aviso",
+                html = "No tienes permisos para editar este usuario.",
+                confirmButtonText = "OK",
+                target = "body"
+            });
+            return;
+        }
+
+        _guardando = true;
+
+        try
+        {
+            // 1) Actualizar datos básicos
+            var resBasicos = await UsersService.ActualizarUsuarioBasicoAsync(
+                model.Id!,
+                model.FullName!,
+                model.UserName!,
+                model.Email!,
+                model.PhoneNumber
+            );
+
+            // 2) Activar / Desactivar
+            var resActivo = await UsersService.EstablecerActivoAsync(model.Id!, model.IsActive);
+
+            var ok = resBasicos.Succeeded && resActivo;
+
+            if (ok)
+            {
+                // Espera a que el usuario cierre el modal ANTES de navegar
+                await JS.InvokeVoidAsync("Swal.fire", new
+                {
+                    icon = "success",
+                    title = "Éxito",
+                    html = $"Usuario actualizado correctamente ✅",
+                    confirmButtonText = "OK",
+                    target = "body"
+                });
+
+                // await JS.InvokeAsync<object>("Swal.fire", new
+                // {
+                //     icon = "success",
+                //     title = "Éxito",
+                //     html = "Usuario actualizado correctamente ✅",
+                //     confirmButtonText = "OK",
+                //     allowOutsideClick = false,
+                //     target = "body"
+                // });
+
+                Navigation.NavigateTo("/users", forceLoad: true);
+            }
+            else
+            {
+                var errores = string.Join("<br/>", resBasicos.Errors?.Select(e => e.Description) ?? Array.Empty<string>());
+                await JS.InvokeVoidAsync("Swal.fire", new
+                {
+                    icon = "error",
+                    title = "Error",
+                    html = $"No se pudo guardar.<br/>{errores}",
+                    confirmButtonText = "OK",
+                    target = "body"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "error",
+                title = "Error",
+                html = ex.Message,
+                confirmButtonText = "OK",
+                target = "body"
+            });
+        }
+        finally
+        {
+            _guardando = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/users", forceLoad: true);
+
+    // --------- Reglas compartidas con el grid ---------
+    private bool EsMismoUsuario(ApplicationUser u) => u.Id == currentUserId;
+    private bool EsUsuarioPrincipal(ApplicationUser u) => string.Equals(u?.UserName, USER_PRINCIPAL, StringComparison.OrdinalIgnoreCase);
+
+    private async Task<IList<string>> RolesDe(ApplicationUser u) =>
+        await UsersService.ObtenerRolesDeUsuarioAsync(u.Id) ?? new List<string>();
+
+    private async Task<bool> TieneRol(ApplicationUser u, string rol)
+    {
+        var lst = await RolesDe(u);
+        return lst.Contains(rol);
+    }
+
+    private async Task<bool> EsAdminSecundario(ApplicationUser u) => await TieneRol(u, ROL_ADMIN_SECUNDARIO);
+
+    private bool PuedeVerAcciones(ApplicationUser fila)
+    {
+        if (EsUsuarioPrincipal(fila)) return false;
+        if (EsUsuarioSistema) return false;
+        if (EsPrincipalLogueado) return !EsMismoUsuario(fila);
+
+        if (EsAdminSecundarioLogueado)
+        {
+            if (EsMismoUsuario(fila)) return true;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool PuedeEditar(ApplicationUser fila)
+    {
+        if (EsUsuarioPrincipal(fila)) return false;
+        if (EsUsuarioSistema) return false;
+        if (EsPrincipalLogueado) return !EsMismoUsuario(fila);
+
+        if (EsAdminSecundarioLogueado)
+        {
+            if (EsMismoUsuario(fila)) return true;
+            var roles = UsersService.ObtenerRolesDeUsuarioAsync(fila.Id).GetAwaiter().GetResult();
+            var esSecundario = roles?.Contains(ROL_ADMIN_SECUNDARIO) == true;
+            return !esSecundario;
+        }
+
+        return false;
+    }
+
+    // --------- Modelo simple ---------
+    public class UserEditModel
+    {
+        public string? Id { get; set; }
+        public string? FullName { get; set; }
+        public string? UserName { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

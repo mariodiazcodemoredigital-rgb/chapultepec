@@ -1,0 +1,42 @@
+﻿@using System.Security.Claims
+
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inherits LayoutComponentBase
+
+<div class="dashboard-container ">
+    <Sidebar UserName="@userName" FullName="@fullName" Role="@role" />
+    <main class="main-content ">      
+        <div class="dashboard-content dashboard-content--flush">
+            @Body
+        </div>
+    </main>
+</div>
+
+@code {
+   
+    private ClaimsPrincipal user;
+    private string? userName;
+    private string? fullName;
+    private string? role;
+
+    protected override async Task OnInitializedAsync()
+    {       
+        
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            userName = user.Identity.Name;
+            fullName = user.FindFirst("FullName")?.Value;
+            role = user.FindFirst(ClaimTypes.Role)?.Value;
+        }
+    }
+
+    void OnSidebarChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+      
+    }
+}

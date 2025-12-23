@@ -1,0 +1,440 @@
+﻿@using Microsoft.AspNetCore.Identity
+@using crmchapultepec.data.Data @* donde está tu ApplicationUser *@
+@using crmchapultepec.Components.Shared
+@* @using crmchapultepec.services.Implementation.Sidebar *@
+@using crmchapultepec.Components
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
+@inject IHttpContextAccessor HttpContextAccessor
+@* @inject SidebarService SidebarSvc *@
+
+@implements IDisposable
+@rendermode InteractiveServer
+
+@{
+    var submenuKey = "admin";
+    var submenuFleet = "fleet";
+    var submenuBookings = "bookings";
+    var submenuFinance = "finance";
+    var submenuReports = "reports";
+    var submenuComercial = "comercial";
+}
+
+<aside class="sidebar">
+@* <aside class="sidebar @(SidebarSvc.Visible ? "" : "is-collapsed")"> *@
+  @*   <button class="sidebar-close" @onclick="() => SidebarSvc.Set(true)">
+        <i class="fas fa-times"></i>
+    </button> *@
+
+    <div class="sidebar-header">
+        <div class="logo">
+            <i class="fas fa-car"></i>
+            <div class="logo-text">
+                <h3>Renta un Sedan</h3>
+                <span>Gestión de flotilla</span>
+            </div>
+        </div>
+    </div>
+    <div class="sidebar-content">
+        <nav class="sidebar-nav">
+            <ul>
+                <!-- Dashboard -->             
+                <li class="nav-item">
+                    <SidebarLink Href="/" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.All">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Dashboard</span>
+                    </SidebarLink>                    
+                </li>
+
+                <!-- Flota -->
+               @if (new[] { "Administrador", "Usuario Sistema" }.Contains(Role))
+               {
+                    <li class="nav-item has-submenu @(IsSubMenuOpen(submenuFleet, "/fleet", "/maintenance", "/insurance") ? "open" : "")">
+                        <a href="javascript:void(0)" class="submenu-toggle" @onclick="@(() => ToggleSubMenu(submenuFleet))">
+                            <i class="fas fa-car"></i>
+                            <span>Flota</span>
+                            <i class="fas fa-chevron-down submenu-icon"></i>
+                        </a>
+                        <ul class="submenu">
+                            <li>                          
+                                <SidebarLink Href="/fleet" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-car-side"></i>
+                                    <span>Vehículos</span>
+                                </SidebarLink>
+                            </li>
+                            <li>
+                                <SidebarLink Href="/maintenance" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-tools"></i>
+                                    <span>Mantenimiento</span>
+                                </SidebarLink>
+                            </li>
+                            <li>
+                                <SidebarLink Href="/insurance" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-shield-alt"></i>
+                                    <span>Seguros</span>
+                                </SidebarLink>
+                            </li>                     
+                        </ul>
+                    </li>
+               }
+              
+
+                <!-- Reservas y Clientes -->
+                @if (new[] { "Administrador", "Usuario Sistema" }.Contains(Role))
+                {
+                    <li class="nav-item has-submenu @(IsSubMenuOpen(submenuBookings, "/bookings", "/customers") ? "open" : "")">
+                        <a href="javascript:void(0)" class="submenu-toggle" @onclick="@(() => ToggleSubMenu(submenuBookings))">
+                            <i class="fas fa-calendar"></i>
+                            <span>Reservas y Clientes</span>
+                            <i class="fas fa-chevron-down submenu-icon"></i>
+                        </a>
+                        <ul class="submenu">
+                            <li>
+                                <SidebarLink Href="/bookings" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-calendar-check"></i>
+                                    <span>Reservaciones</span>
+                                </SidebarLink>
+                            </li>
+                            <li>
+                                <SidebarLink Href="/customers" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-user-friends"></i>
+                                    <span>Clientes</span>
+                                </SidebarLink>
+                            </li>                       
+                        </ul>
+                    </li>
+                }
+
+                <!-- Finanzas -->
+                @if (new[] { "Administrador", "Usuario Sistema" }.Contains(Role))
+                {
+                    <li class="nav-item has-submenu @(IsSubMenuOpen(submenuFinance, "/payments", "/pricing") ? "open" : "")">
+                        <a href="javascript:void(0)" class="submenu-toggle" @onclick="@(() => ToggleSubMenu(submenuFinance))">
+                            <i class="fas fa-dollar-sign"></i>
+                            <span>Finanzas</span>
+                            <i class="fas fa-chevron-down submenu-icon"></i>
+                        </a>
+                        <ul class="submenu">
+                            <li>
+                                <SidebarLink Href="/payments" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-credit-card"></i>
+                                    <span>Pagos</span>
+                                </SidebarLink>
+                            </li>
+                            <li>
+                                <SidebarLink Href="/pricing" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-tags"></i>
+                                    <span>Tarifas y Promociones</span>
+                                </SidebarLink>
+                            </li>                       
+                        </ul>
+                    </li>
+                }
+
+                <!-- Reportes -->
+                @if (new[] { "Administrador", "Usuario Sistema" }.Contains(Role))
+                {
+                    <li class="nav-item has-submenu @(IsSubMenuOpen(submenuReports, "/reports/revenue", "/reports/fleet-usage", "/reports/customers") ? "open" : "")">
+                        <a href="javascript:void(0)" class="submenu-toggle" @onclick="@(() => ToggleSubMenu(submenuReports))">
+                            <i class="fas fa-chart-pie"></i>
+                            <span>Reportes</span>
+                            <i class="fas fa-chevron-down submenu-icon"></i>
+                        </a>
+                        <ul class="submenu">
+                            <li>
+                                <SidebarLink Href="/reports/revenue" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-dollar-sign"></i>
+                                    <span>Ingresos</span>
+                                </SidebarLink>
+                            </li>
+                             <li>
+                                <SidebarLink Href="/reports/fleet-usage" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-car-side"></i>
+                                    <span>Ocupación de Flota</span>
+                                </SidebarLink>
+                            </li>
+                            <li>
+                                <SidebarLink Href="/reports/customers" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-chart-line"></i>
+                                    <span>Estadísticas de Clientes</span>
+                                </SidebarLink>
+                            </li>
+                       
+                        </ul>
+                    </li>
+                }
+
+                <!-- Administración -->
+                @if (new[] { "Administrador", "Administrador Secundario" }.Contains(Role))
+                {
+                    <li class="nav-item has-submenu @(IsSubMenuOpen(submenuKey, "/users", "/roles", "/gestionadmin") ? "open" : "")">
+                        <a href="javascript:void(0)" class="submenu-toggle" @onclick="@(() => ToggleSubMenu(submenuKey))" style="cursor: pointer;">
+                            <i class="fas fa-cogs"></i>
+                            <span>Administración</span>
+                            <i class="fas fa-chevron-down submenu-icon"></i>
+                        </a>
+                        <ul class="submenu">
+                            <li>                          
+                                <SidebarLink Href="/users" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-user-plus"></i>
+                                    <span>Usuarios</span>
+                                </SidebarLink>
+                            </li>
+                            @if (Role == "Administrador")
+                            {
+                                <li>
+                                    <SidebarLink Href="/roles" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                        <i class="fas fa-user-shield"></i>
+                                        <span>Roles</span>
+                                    </SidebarLink>
+                                </li>
+                            }
+                          @*   @if (Role == "Administrador")
+                            { *@
+                                <li>
+                                    <SidebarLink Href="/gestionadmin" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                        <i class="fas fa-users-cog"></i>
+                                        <span>Equipos</span>
+                                    </SidebarLink>
+                                </li>
+                           @*  } *@
+                         
+                        </ul>
+                    </li>
+                }
+
+                <!-- CRM Ventas -->
+               @*  <li class="nav-item">
+                    <SidebarLink Href="/crmventas" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Ventas</span>
+                    </SidebarLink>
+                </li> *@
+
+                <!-- Comercial (CRM + LeadSales) -->
+                @if (new[] { "Administrador", "Usuario Sistema" }.Contains(Role))
+                {
+                    <li class="nav-item has-submenu @(IsSubMenuOpen(submenuComercial, "/crminbox", "/leadsales", "/saleshealth") ? "open" : "")">
+                        <a href="javascript:void(0)" class="submenu-toggle" @onclick="@(() => ToggleSubMenu(submenuComercial))">
+                            <i class="fas fa-handshake"></i>
+                            <span>Comercial</span>
+                            <i class="fas fa-chevron-down submenu-icon"></i>
+                        </a>
+                        <ul class="submenu">
+                            <li>
+                                <SidebarLink Href="/crminbox" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-comments"></i>
+                                    <span>Conversaciones</span> 
+                                </SidebarLink>
+                            </li>
+                            <li>
+                                <SidebarLink Href="/leadsales" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-columns"></i>
+                                    <span>Leads / Embudo</span>
+                                </SidebarLink>
+                            </li>
+                            <li>
+                                <SidebarLink Href="/saleshealth" ForceLoad="true" Class="nav-link" Match="NavLinkMatch.Prefix">
+                                    <i class="fas fa-chart-line"></i>
+                                    <span>Rendimiento Comercial</span>
+                                </SidebarLink>
+                            </li>
+
+                        </ul>
+                    </li> 
+                }
+
+               
+            </ul>
+        </nav>
+    </div>
+
+    <div class="sidebar-footer">
+        <div class="user-profile">
+            <div class="user-avatar">@GetInitials()</div>
+            <div class="user-info">
+                <span class="user-name">@FullName</span>
+                <span class="user-role">@Role</span>
+            </div>
+        </div>      
+
+        <form method="post" action="/Account/Logout" style="margin-top:12px">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="../" /> @* o "/" si es pública *@
+            <button type="submit" class="logout-btn">
+                <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
+            </button>
+        </form>
+
+
+    </div>
+</aside>
+
+@code {
+    [Parameter] public string? UserName { get; set; }
+    [Parameter] public string? FullName { get; set; }
+    [Parameter] public string? Role { get; set; }
+
+    private const string LOGOUT_REDIRECT = "/login"; // o "/" si no tienes página de login explícita
+    private string currentPath = "";
+    private bool firstRender = true;
+    private Dictionary<string, bool> subMenuStates = new();
+
+    private string? _requestVerificationToken;
+    
+    protected override void OnInitialized()
+    {
+      
+
+        var http = HttpContextAccessor.HttpContext;
+        if (http != null)
+        {
+            // Genera y almacena el token (pone la cookie + te da el token de request)
+            var tokens = Antiforgery.GetAndStoreTokens(http);
+            _requestVerificationToken = tokens.RequestToken;
+        }
+
+        currentPath = GetCurrentPath();
+        InitSubMenuStates(); // detecta cuál abrir según la ruta
+        Navigation.LocationChanged += OnLocationChanged;        
+    }
+
+    void OnSidebarChanged() => InvokeAsync(StateHasChanged);
+
+    private void InitSubMenuStates()
+    {
+        subMenuStates["admin"] = currentPath.StartsWith("users", StringComparison.OrdinalIgnoreCase)
+                              || currentPath.StartsWith("roles", StringComparison.OrdinalIgnoreCase);
+
+     
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // fallback: si currentPath no está seteado, intentalo aquí
+        if (string.IsNullOrEmpty(currentPath))
+        {
+            currentPath = GetCurrentPath();           
+            StateHasChanged();
+        }
+    }
+
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        currentPath = GetCurrentPath();
+        StateHasChanged(); // fuerza a re-renderizar el componente
+    }
+  
+    private string GetCurrentPath()
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri).Trim('/');
+        return string.IsNullOrEmpty(path) ? "/" : path;
+    }
+
+
+    private bool IsCurrent(string path)
+    {        
+        path = path.Trim('/');
+        return string.IsNullOrEmpty(currentPath) && string.IsNullOrEmpty(path)
+            || string.Equals(currentPath, path, StringComparison.OrdinalIgnoreCase);
+    }   
+
+    private bool IsSectionActive(params string[] paths)
+    {
+        return paths.Any(path =>
+            currentPath.StartsWith(path.Trim('/'), StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    private bool IsSubMenuOpen(string key, params string[] paths)
+    {
+        // Si se activó por navegación o por clic
+        return (subMenuStates.ContainsKey(key) && subMenuStates[key]) ||
+               IsSectionActive(paths);
+    }
+
+    private void ToggleSubMenu(string key)
+    {
+        if (subMenuStates.ContainsKey(key))
+        {
+            subMenuStates[key] = !subMenuStates[key];
+        }
+        else
+        {
+            subMenuStates[key] = true;
+        }
+    }
+
+    private async Task OnNavItemClick()
+    {
+        await JS.InvokeVoidAsync("sidebarHelper.closeSidebarOnMobile");
+    }
+      
+
+    private string GetInitials()
+    {
+        if (string.IsNullOrWhiteSpace(FullName))
+            return "";
+
+        var parts = FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length == 0)
+            return "";
+
+        var firstInitial = parts[0][0].ToString().ToUpper(); // nombre
+
+        if (parts.Length == 1)
+            return firstInitial;
+
+        var secondInitial = parts[1][0].ToString().ToUpper(); // primer apellido
+
+        return firstInitial + secondInitial;
+    }
+
+    private async Task OnLogoutClick()
+    {
+        // (Opcional) Confirmación
+        var result = await JS.InvokeAsync<object>("Swal.fire", new
+        {
+            title = "¿Cerrar sesión?",
+            text = "Se cerrará tu sesión actual.",
+            icon = "question",
+            showCancelButton = true,
+            confirmButtonText = "Sí, salir",
+            cancelButtonText = "Cancelar"
+        });
+
+        // Si no usas SweetAlert, elimina este bloque y llama directo a Logout()
+        if (result?.ToString()?.Contains("\"isConfirmed\":true") == true)
+        {
+            Navigation.NavigateTo("/Account/logout", forceLoad: true);
+            // Navigation.NavigateTo("/Identity/Account/Logout?returnUrl=/login", forceLoad: true);
+            // await Logout();
+        }
+    }
+
+    private async Task Logout()
+    {
+        // 1) Cierra sesión de Identity → invalida la cookie de autenticación (HttpOnly)
+        await SignInManager.SignOutAsync();
+
+        // 2) Redirige y fuerza recarga dura para terminar el circuito de SignalR
+        Navigation.NavigateTo(LOGOUT_REDIRECT, forceLoad: true);
+    }
+
+
+    public void Dispose()
+    {
+       
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+
+
+
+}

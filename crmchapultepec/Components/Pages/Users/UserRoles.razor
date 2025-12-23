@@ -1,0 +1,180 @@
+﻿@page "/users/roles/{UserId}"
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using crmchapultepec.data.Data
+@using crmchapultepec.services.Interfaces.UsersService
+@inject IUsersService UsersService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@* @attribute [Authorize] *@
+@rendermode InteractiveServer
+
+<h3 class="mb-3">Asignar rol</h3>
+
+@if (_loading)
+{
+    <div class="card p-4" style="min-height:220px; display:flex; align-items:center; justify-content:center;">
+        <div style="text-align:center">
+            <div class="spinner-border" role="status"></div>
+            <div style="margin-top:10px">Cargando roles…</div>
+        </div>
+    </div>
+}
+else if (_error)
+{
+    <div class="alert alert-danger">No fue posible cargar la información del usuario.</div>
+    <button class="btn btn-secondary" @onclick="Regresar">Regresar</button>
+}
+else
+{
+    <div class="card shadow-sm" style="max-width:520px;">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center" style="width:48px;height:48px;">
+                    <span class="bi bi-person-fill" style="font-size:22px;"></span>
+                </div>
+                <div>
+                    <div class="fw-semibold">@MostrarNombre()</div>
+                    <div class="text-muted small">@MostrarEmail()</div>
+                </div>
+            </div>
+
+            <div class="mb-2 fw-semibold">Selecciona un rol</div>
+
+            <div class="list-group mb-3">
+                @foreach (var rol in rolesFiltrados)
+                {
+                    var isSelected = string.Equals(rolSeleccionado, rol.Name, StringComparison.OrdinalIgnoreCase);
+                    <label class="list-group-item d-flex align-items-center justify-content-between" style="cursor:pointer;">
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="radio"
+                                   name="rol"
+                                   value="@rol.Name"
+                                   checked="@isSelected"
+                                   @onchange="() => OnRoleChanged(rol.Name)" />
+                            <span>@rol.Name</span>
+                        </div>
+                        @if (isSelected)
+                        {
+                            <span class="badge bg-primary">Actual</span>
+                        }
+                    </label>
+                }
+            </div>
+
+            @if (rolActualNoDisponible)
+            {
+                <div class="alert alert-warning py-2">
+                    El rol actual del usuario no está disponible para asignación (p. ej. <b>Administrador</b>).
+                </div>
+            }
+
+            <div class="d-flex gap-2">
+                <button class="btn-ghost btn-ghost-sky" @onclick="Regresar">Regresar</button>
+                <button class="btn btn-brand btn-brand-danger" @onclick="Cancelar">Cancelar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string UserId { get; set; } = default!;
+
+    private ApplicationUser? usuario;              // <-- para Nombre/Email
+    private List<IdentityRole> roles = new();
+    private List<IdentityRole> rolesFiltrados = new();
+    private IList<string> rolesUsuario = new List<string>();
+    private string? rolActual;
+    private string? rolSeleccionado;
+    private bool rolActualNoDisponible;
+    private bool _loading = true;
+    private bool _error;
+
+    private const string ROL_ADMIN = "Administrador";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _loading = true;
+
+            // Usuario (para mostrar nombre/email)
+            usuario = await UsersService.ObtenerUsuarioPorIdAsync(UserId);
+            if (usuario is null)
+            {
+                _error = true;
+                return;
+            }
+
+            // Roles
+            roles = await UsersService.ObtenerRolesAsync();
+            rolesFiltrados = roles
+                .Where(r => !string.Equals(r.Name, ROL_ADMIN, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(r => r.Name)
+                .ToList();
+
+            rolesUsuario = await UsersService.ObtenerRolesDeUsuarioAsync(UserId) ?? new List<string>();
+
+            // Rol actual (primero que no sea "Administrador")
+            rolActual = rolesUsuario.FirstOrDefault(r => !string.Equals(r, ROL_ADMIN, StringComparison.OrdinalIgnoreCase));
+            rolSeleccionado = rolActual;
+
+            rolActualNoDisponible = rolActual != null && !rolesFiltrados.Any(r => r.Name == rolActual);
+        }
+        catch
+        {
+            _error = true;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string MostrarNombre()
+        => string.IsNullOrWhiteSpace(usuario?.FullName)
+            ? (usuario?.UserName ?? "-")
+            : usuario!.FullName!;
+
+    private string MostrarEmail()
+        => string.IsNullOrWhiteSpace(usuario?.Email) ? "-" : usuario!.Email!;
+
+    private async Task OnRoleChanged(string nuevoRol)
+    {
+        if (string.Equals(nuevoRol, rolActual, StringComparison.OrdinalIgnoreCase))
+            return; // no cambió
+
+        // Reemplaza el rol del usuario por el seleccionado (exclusivo)
+        var ok = await UsersService.ReemplazarRolDeUsuarioAsync(UserId, nuevoRol);
+        if (ok)
+        {
+            await JS.InvokeAsync<object>("Swal.fire", new
+            {
+                icon = "success",
+                title = "Rol actualizado",
+                html = $"Se asignó el rol <b>{nuevoRol}</b> a <b>{MostrarNombre()}</b>.",
+                confirmButtonText = "OK",
+                allowOutsideClick = false,
+                target = "body"
+            });
+
+            Navigation.NavigateTo("/users", forceLoad: true);
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "error",
+                title = "No se pudo actualizar",
+                html = "Inténtalo nuevamente.",
+                confirmButtonText = "OK",
+                target = "body"
+            });
+        }
+    }
+
+    private void Regresar() => Navigation.NavigateTo("/users", forceLoad: true);
+    private void Cancelar() => Navigation.NavigateTo("/users", forceLoad: true);
+}

@@ -1,0 +1,191 @@
+﻿@using crmchapultepec.entities.EvolutionWebhook
+@using crmchapultepec.entities.Entities.CRM
+@using crmchapultepec.services.Implementation.CRM
+@using System.Globalization
+@using System.Text.Encodings.Web
+@using System.Text.RegularExpressions
+
+<div class="crm-inbox__threadlist">
+
+    <div class="crm-inbox__tabs">
+        @foreach (var t in Tabs)
+        {
+            var isActive = t.f == Selected;
+            <button class="@($"crm-inbox__tab{(isActive ? " active" : "")}")"
+                    @onclick="() => OnFilterChange.InvokeAsync(t.f)">
+                @t.label
+            </button>
+        }
+    </div>
+
+    <div class="crm-inbox__toolbar">
+        <input class="search"
+               placeholder="Buscar por nombre, teléfono..."
+               @bind-value="searchText"
+               @bind-value:event="oninput"
+               @bind-value:after="OnSearchValueChanged"
+               @onkeydown:stopPropagation
+               @onkeypress:stopPropagation />
+
+        <div class="pill-dropdown sort">
+            <button type="button" class="pill-btn" @onclick="() => showSortMenu = !showSortMenu">
+                @CurrentSortLabel <span class="pill-caret">▾</span>
+            </button>
+
+            @if (showSortMenu)
+            {
+                <ul class="pill-menu" role="listbox">
+                    <li class="pill-option" @onclick="@(() => SelectSort(SortMode.RecentDesc))">Más recientes</li>
+                    <li class="pill-option" @onclick="@(() => SelectSort(SortMode.OldestAsc))">Más antiguos</li>
+                    <li class="pill-option" @onclick="@(() => SelectSort(SortMode.UnreadFirst))">No leídos primero</li>
+                </ul>
+            }
+        </div>
+    </div>
+
+    <div class="crm-inbox__items">
+        @if (!Threads.Any() && string.IsNullOrWhiteSpace(searchText))
+        {
+            <div style="padding:18px; color:var(--muted)">No hay conversaciones.</div>
+        }
+        else
+        {
+            @foreach (var t in VisibleThreads)
+            {
+                var active = t.ThreadId == SelectedId ? "active" : "";
+                var isUnread = t.UnreadCount > 0;
+                var rowCls = $"crm-inbox__thread {active} {(isUnread ? "unread" : "")}";
+
+                // Mapeo de datos seguros para visualización
+                var displayName = !string.IsNullOrWhiteSpace(t.CustomerDisplayName) ? t.CustomerDisplayName : (t.CustomerPhone ?? "Desconocido");
+                var displayDate = t.LastMessageUtc ?? t.CreatedUtc;
+
+                <div class="@rowCls" @onclick="() => SelectItem(t.ThreadId)">
+                    <div class="crm-inbox__avatar">@Initial(displayName)</div>
+
+                    <div>
+                        <div class="crm-inbox__hstack">
+                            <div class="crm-inbox__name">@Highlight(displayName, searchText)</div>
+                            <span class="muted" style="font-size:0.7em; margin-left:4px;">@GetChannelName(t.Channel)</span>
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(t.AssignedTo))
+                        {
+                            <div class="crm-inbox__assignee-badge">
+                                <i class="fas fa-user-check"></i>
+                                <span>@t.AssignedTo</span>
+                            </div>
+                        }
+
+                        <div class="crm-inbox__preview">
+                            @Highlight(Truncate(t.LastMessagePreview, 90), searchText)
+                        </div>
+                    </div>
+
+                    <div class="crm-inbox__rmeta">
+                        <small class="crm-inbox__meta">
+                            @displayDate.ToLocalTime().ToString("HH:mm")
+                        </small>
+
+                        @if (isUnread)
+                        {
+                            <span class="unread-badge">@(t.UnreadCount > 99 ? "99+" : t.UnreadCount.ToString())</span>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? SelectedId { get; set; }
+    [Parameter] public EventCallback<string> OnSelect { get; set; }
+    [Parameter] public EventCallback<string> OnSearchChanged { get; set; }
+    [Parameter] public IReadOnlyList<CrmThread> Threads { get; set; } = Array.Empty<CrmThread>();
+    [Parameter] public InboxFilter Selected { get; set; }
+    [Parameter] public EventCallback<InboxFilter> OnFilterChange { get; set; }
+
+    private string searchText = "";
+    private bool showSortMenu;
+
+    // Filtros visuales simples sobre la lista en memoria (idealmente buscarías en DB si son muchos)
+    private IEnumerable<CrmThread> VisibleThreads => ApplySort(
+        Threads.Where(t => MatchesSearch(t, searchText))
+    );
+
+    private bool MatchesSearch(CrmThread t, string q)
+    {
+        if (string.IsNullOrWhiteSpace(q)) return true;
+        var norm = q.Trim().ToLowerInvariant();
+
+        return (t.CustomerDisplayName?.ToLowerInvariant().Contains(norm) ?? false) ||
+               (t.CustomerPhone?.Contains(norm) ?? false) ||
+               (t.LastMessagePreview?.ToLowerInvariant().Contains(norm) ?? false);
+    }
+
+    private async Task OnSearchValueChanged()
+    {
+        await OnSearchChanged.InvokeAsync(searchText);
+    }
+
+    private Task SelectItem(string id) => OnSelect.InvokeAsync(id);
+
+    // Helpers
+    private string Initial(string? s) => string.IsNullOrWhiteSpace(s) ? "?" : s.Trim()[0].ToString().ToUpperInvariant();
+
+    private string Truncate(string? s, int max) =>
+        string.IsNullOrWhiteSpace(s) ? "" : (s.Length <= max ? s : s.Substring(0, max) + "…");
+
+    private string GetChannelName(int ch) => ch switch
+    {
+        1 => "WA",
+        2 => "MS",
+        3 => "IG",
+        4 => "WEB",
+        _ => ""
+    };
+
+    // Tabs
+    private static (InboxFilter f, string label)[] Tabs = new[]
+    {
+        (InboxFilter.Todos, "Todos"),
+        (InboxFilter.Mios, "Míos"),
+        (InboxFilter.SinAsignar, "Sin asignar"),
+        (InboxFilter.Equipo, "Equipo"),
+    };
+
+    // Sorting
+    private enum SortMode { RecentDesc, OldestAsc, UnreadFirst }
+    private SortMode sortMode = SortMode.RecentDesc;
+
+    private string CurrentSortLabel => sortMode switch
+    {
+        SortMode.RecentDesc => "Más recientes",
+        SortMode.OldestAsc => "Más antiguos",
+        SortMode.UnreadFirst => "No leídos primero",
+        _ => "Más recientes"
+    };
+
+    private void SelectSort(SortMode mode)
+    {
+        sortMode = mode;
+        showSortMenu = false;
+    }
+
+    private IEnumerable<CrmThread> ApplySort(IEnumerable<CrmThread> src) => sortMode switch
+    {
+        SortMode.OldestAsc => src.OrderBy(t => t.LastMessageUtc),
+        SortMode.UnreadFirst => src.OrderByDescending(t => t.UnreadCount > 0).ThenByDescending(t => t.LastMessageUtc),
+        _ => src.OrderByDescending(t => t.LastMessageUtc),
+    };
+
+    private static MarkupString Highlight(string? source, string? query)
+    {
+        if (string.IsNullOrWhiteSpace(source)) return new MarkupString("");
+        var safe = HtmlEncoder.Default.Encode(source);
+        if (string.IsNullOrWhiteSpace(query)) return new MarkupString(safe);
+
+        return new MarkupString(Regex.Replace(safe, Regex.Escape(query), m => $"<mark>{m.Value}</mark>", RegexOptions.IgnoreCase));
+    }
+}

@@ -1,0 +1,181 @@
+﻿@page "/users/new"
+@using Microsoft.AspNetCore.Authorization
+@using crmchapultepec.services.Implementation
+@using crmchapultepec.services.Interfaces
+@using crmchapultepec.services.Interfaces.UsersService
+@using System.Security.Claims
+
+
+@inject NavigationManager Navigation
+@inject IUsersService UsersService
+@inject IJSRuntime JS
+
+@* @attribute [Authorize] *@
+@rendermode InteractiveServer
+<h3>Nuevo Usuario</h3>
+
+<div class="mb-3">
+    <label>Nombre Completo:</label>
+    <input class="form-control" @bind="fullName" />
+</div>
+
+<div class="mb-3">
+    <label>Nombre de Usuario (para login):</label>
+    <input class="form-control" @bind="userName" />
+</div>
+
+<div class="mb-3">
+    <label>Email (será usado como login):</label>
+    <input class="form-control" @bind="email" type="email" />
+</div>
+
+<div class="mb-3">
+    <label>Contraseña:</label>
+    <input class="form-control" @bind="password" type="password" />
+</div>
+
+@* Selector de rol SOLO si es principal o secundario *@
+@if (MostrarSelectorRol)
+{
+    <div class="mb-3">
+        <label>Rol a asignar:</label>
+        <RadzenDropDown Data="@rolesDisponibles"
+                        @bind-Value="rolSeleccionado"
+                        TValue="string"
+                        Placeholder="Seleccione un rol"
+                        Style="width:100%" />
+    </div>
+}
+
+<button class="btn btn-brand btn-brand-success" @onclick="Crear">Guardar</button>
+<button class="btn btn-brand btn-brand-danger" @onclick="Volver">Cancelar</button>
+
+@code {
+    private const string USER_PRINCIPAL = "mdiaz";
+    private const string ROL_ADMIN_SECUNDARIO = "Administrador Secundario";
+    private const string ROL_USUARIO_SISTEMA = "Usuario Sistema";
+
+    private string email = "";
+    private string password = "";
+    private string fullName = "";
+    private string userName = "";
+
+    // Estado logueado
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; }
+    private string? currentUserName;
+    private bool EsPrincipalLogueado => string.Equals(currentUserName, USER_PRINCIPAL, StringComparison.OrdinalIgnoreCase);
+    private bool EsAdminSecundarioLogueado { get; set; }
+    private bool MostrarSelectorRol => EsPrincipalLogueado || EsAdminSecundarioLogueado;
+
+    // Roles para el combo
+    private List<string> rolesDisponibles = new();
+    private string? rolSeleccionado;
+
+    private bool _loaded;
+    private bool _guardando;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_loaded) return;
+        _loaded = true;
+
+        // Obtener usuario logueado y roles
+        var auth = await AuthenticationStateTask;
+        var cp = auth.User;
+        currentUserName = cp.Identity?.Name;
+
+        var userId = cp.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            var rolesLog = await UsersService.ObtenerRolesDeUsuarioAsync(userId);
+            EsAdminSecundarioLogueado = rolesLog?.Contains(ROL_ADMIN_SECUNDARIO) == true;
+        }
+
+        // Si es admin (principal o secundario), poblamos el combo
+        if (MostrarSelectorRol)
+        {
+            rolesDisponibles = await UsersService.ObtenerRolesDisponiblesAsync();
+
+            // (Opcional) Si quieres evitar que un secundario asigne "Administrador Secundario" a otros, filtra:
+            // if (EsAdminSecundarioLogueado)
+            //     rolesDisponibles = rolesDisponibles.Where(r => r != ROL_ADMIN_SECUNDARIO).ToList();
+        }
+
+        StateHasChanged();
+    }
+
+
+    private async Task Crear()
+    {
+        // Validaciones básicas
+        if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(userName) ||
+            string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new { icon = "warning", title = "Campos requeridos", html = "Completa todos los campos.", confirmButtonText = "OK" });
+            return;
+        }
+
+        // Si el logueado es admin y seleccionó un rol, úsalo; si no, cae a Usuario Sistema
+        var rol = (MostrarSelectorRol && !string.IsNullOrWhiteSpace(rolSeleccionado))
+                    ? rolSeleccionado!
+                    : ROL_USUARIO_SISTEMA;
+
+        _guardando = true;
+
+        try
+        {
+            var result = await UsersService.CrearUsuarioAsync(userName, fullName, email, password, rol);
+
+            if (result.Succeeded)
+            {
+                await JS.InvokeVoidAsync("Swal.fire", new
+                {
+                    icon = "success",
+                    title = "Éxito",
+                    html = $"Usuario creado correctamente ✅<br><small>Rol asignado: <b>{rol}</b></small>",
+                    confirmButtonText = "OK",
+                    target = "body"
+                });
+                Navigation.NavigateTo("/users", forceLoad: true);
+            }
+            else
+            {
+                var erroresHtml = "<ul>" + string.Join("", result.Errors.Select(e => $"<li>{e.Description}</li>")) + "</ul>";
+                await JS.InvokeVoidAsync("Swal.fire", new { icon = "error", title = "Error", html = erroresHtml, confirmButtonText = "OK" });
+            }
+        }
+        finally
+        {
+            _guardando = false;
+        }
+
+        //var result = await UsersService.CrearUsuarioAsync(userName, fullName, email, password);
+
+        // if (result.Succeeded)
+        // {
+        //     await JS.InvokeVoidAsync("Swal.fire", new
+        //     {
+        //         icon = "success",
+        //         title = "Éxito",
+        //         html = "Usuario creado correctamente ✅",
+        //         confirmButtonText = "OK",
+        //         target = "body" // aseguras que se monte en body
+        //     });
+        //     Navigation.NavigateTo("/users", forceLoad: true);
+        // }
+        // else
+        // {
+        //     var erroresHtml = "<ul>" + string.Join("", result.Errors.Select(e => $"<li>{e.Description}</li>")) + "</ul>";
+        //     await JS.InvokeVoidAsync("Swal.fire", new
+        //     {
+        //         icon = "error",
+        //         title = "Error",
+        //         html = erroresHtml,
+        //         confirmButtonText = "OK"
+        //     });
+        // }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/users", forceLoad: true);
+
+}

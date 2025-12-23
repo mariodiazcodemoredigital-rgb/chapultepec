@@ -1,0 +1,78 @@
+﻿@page "/mediatest"
+@using System.IO
+@using crmchapultepec.entities.EvolutionWebhook
+@using crmchapultepec.services.Interfaces.EvolutionWebhook
+
+@inject HttpClient Http
+@inject ICrmMessageMediaService MediaRepo
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+
+
+@rendermode InteractiveServer
+
+<h3>CrmMessageMedias</h3>
+
+@if (medias == null)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    <ul>
+        @foreach (var m in medias)
+        {
+            <li>
+                <a href="@($"/api/webhook/evolution/download/{m.Id}")" target="_blank">
+                    @m.FileName (@m.MediaType)
+                </a>
+            </li>
+        }
+    </ul>
+   
+}
+
+@code {
+    /* private List<CrmMessageMedia>? medi as;*/
+    List<MediaDto>? medias;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var baseUrl = Nav.BaseUri.TrimEnd('/');
+        medias = await Http.GetFromJsonAsync<List<MediaDto>>(
+            $"{baseUrl}/api/webhook/evolution/all");
+    }
+
+
+    // private byte[]? selectedBytes;
+    // private string? selectedFileName;
+    // private string? selectedFilePath;
+
+    // protected override async Task OnInitializedAsync()
+    // {
+    //     medias = await LoadMediasAsync();
+    // }
+
+    // private async Task<List<CrmMessageMedia>> LoadMediasAsync()
+    // {
+    //     // Traemos todos los registros de prueba
+    //     return await MediaRepo.GetAllAsync(); // necesitas un método GetAllAsync en el repo
+    // }
+
+    // private async Task SelectMedia(CrmMessageMedia media)
+    // {
+    //     selectedBytes = await MediaRepo.GetDecryptedDocumentAsync(media);
+
+    //     if (selectedBytes != null)
+    //     {
+    //         selectedFileName = media.FileName ?? "archivo.pdf";
+
+    //         // Guardar temporal en wwwroot/uploads
+    //         var path = Path.Combine("wwwroot", "uploads", selectedFileName);
+    //         await File.WriteAllBytesAsync(path, selectedBytes);
+
+    //         selectedFilePath = $"/uploads/{selectedFileName}";
+    //     }
+    // }
+}

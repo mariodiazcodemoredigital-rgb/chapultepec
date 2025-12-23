@@ -19,7 +19,7 @@ namespace crmchapultepec.entities.EvolutionWebhook
         public string MediaType { get; set; } = null!;
 
         // 📄 Metadata general
-        public string? MimeType { get; set; }
+        public string? MimeType { get; set; }        
         public string? FileName { get; set; }
         public long? FileLength { get; set; }
         public int? PageCount { get; set; }

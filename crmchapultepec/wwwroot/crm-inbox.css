@@ -1,0 +1,2267 @@
+﻿/* ================== CRM Inbox – Tema Claro y sin scroll externo ================== */
+
+/* Si usas el CRM dentro del contenedor principal, quita padding y overflow externo */
+.dashboard-content.dashboard-content--flush {
+    padding: 0 !important;
+    overflow: hidden; /* <- evita barra extra del contenedor padre */
+    display: block;
+}
+
+/* ---------- Grid raíz del CRM ---------- */
+.crm-inbox {
+    /* Paleta clara */
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --panel-2: #ffffff;
+    --text: #1f2937; /* slate-800 */
+    --muted: #6b7280; /* slate-500/600 */
+    --border: #e5e7eb; /* separadores */
+    --chip: #f3f4f6;
+    --accent: #3b82f6; /* azul primario */
+    --accent-2: #2563eb; /* azul más intenso */
+    --success: #16a34a;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Inter, Arial, sans-serif;
+    color: var(--text);
+    display: grid;
+    grid-template-columns: 280px 360px minmax(480px, 1fr); /* 280 = ancho sidebar global */
+    column-gap: 1px; /* separador vertical */
+    row-gap: 0; /* evita sumar alto extra */
+    background: var(--border);
+    height: 100%; /* ocupa todo el alto del panel de contenido */
+    min-height: 0;
+    overflow: hidden; /* el scroll vive en los hijos (lista/chat) */
+}
+
+/* ---------- Paneles (3 columnas) ---------- */
+.crm-inbox__panel {
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* deja que los hijos con overflow funcionen */
+}
+
+.crm-inbox__panel--headered .crm-inbox__panel-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel-2);
+}
+
+/* Fondo por columna para replicar la referencia visual */
+.crm-inbox__panel--col1,
+.crm-inbox__panel--col2 {
+    background: #f5f7fa; /* gris claro */
+}
+
+.crm-inbox__panel--col3 {
+    background: #ffffff; /* chat blanco */
+}
+
+/* ---------- Helpers ---------- */
+.crm-inbox__hstack {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.crm-inbox__spacer {
+    flex: 1;
+}
+
+.crm-inbox__loading {
+    padding: 12px;
+    color: var(--muted);
+}
+
+/* ================== Sidebar (columna 1) ================== */
+.crm-inbox__sidebar {
+    padding: 10px;
+    background: transparent;
+}
+
+.crm-inbox__sidebar-title {
+    font-weight: 700;
+    letter-spacing: .3px;
+    padding: 12px 8px;
+    color: #0b1220;
+}
+
+.crm-inbox__menu {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.crm-inbox__menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--text);
+}
+
+    .crm-inbox__menu-item:hover {
+        background: #eef2f7;
+    }
+
+.crm-inbox__menu-item--active {
+    background: #eaf3ff;
+    border: 1px solid #dbeafe;
+}
+
+.crm-inbox__menu-count {
+    margin-left: auto;
+    background: #eef2f7;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: var(--accent-2);
+    font-size: 12px;
+    border: 1px solid var(--border);
+}
+
+/* Botones/inputs (scoped) */
+.crm-inbox__btn {
+    background: #ffffff;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+    .crm-inbox__btn:hover {
+        background: #f3f4f6;
+    }
+
+.crm-inbox__btn--primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+    .crm-inbox__btn--primary:hover {
+        background: var(--accent-2);
+    }
+
+.crm-inbox__btn--success {
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+}
+
+    .crm-inbox__btn--success:hover {
+        filter: brightness(.95);
+    }
+
+.crm-inbox__search {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 10px;
+    color: var(--text);
+    width: 100%;
+}
+
+    .crm-inbox__search::placeholder {
+        color: var(--muted);
+    }
+
+/* ================== Thread List (columna 2) ================== */
+.crm-inbox__threadlist {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.crm-inbox__toolbar {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: #f5f7fa;
+    flex: 0 0 auto; /* no crecer */
+}
+
+.crm-inbox__items {
+    background: #f5f7fa;
+    overflow: auto; /* scroll interno solo aquí */
+    min-height: 0;
+}
+
+/* Cada hilo como tarjeta blanca sobre gris */
+.crm-inbox__thread {
+    background: #ffffff;
+    margin: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: grid;
+    grid-template-columns: 44px 1fr auto;
+    gap: 10px;
+    padding: 12px 12px;
+    cursor: pointer;
+    transition: background-color .15s, border-color .15s, box-shadow .15s;
+}
+
+    .crm-inbox__thread:hover {
+        background: #f9fafb;
+        box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    }
+
+.crm-inbox__thread--active {
+    background: #eaf3ff; /* selección celeste muy suave */
+    border-color: #bfdbfe;
+    box-shadow: 0 0 0 2px rgba(59,130,246,.12) inset;
+}
+
+.crm-inbox__avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #eef2f7;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    border: 1px solid var(--border);
+}
+
+.crm-inbox__name {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.crm-inbox__preview {
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.crm-inbox__badge {
+    background: #eef2ff;
+    color: #3749b9;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid #dbeafe;
+}
+
+.crm-inbox__unread-dot {
+    width: 10px;
+    height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+}
+
+/* ================== Chat (columna 3) ================== */
+.crm-inbox__chat {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.crm-inbox__chat-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel-2);
+    flex: 0 0 auto;
+}
+
+.crm-inbox__tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.crm-inbox__tag {
+    background: var(--chip);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.crm-inbox__chat-body {
+    flex: 1 1 auto;
+    overflow: auto; /* scroll interno del chat */
+    min-height: 0;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: #ffffff; /* plano blanco tipo WhatsApp */
+}
+
+.crm-inbox__msg-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    margin: 6px 0;
+}
+
+.crm-inbox__msg-row--right {
+    justify-content: flex-end;
+}
+
+.crm-inbox__bubble {
+    max-width: 75%;
+    background: #f8fafc; /* burbuja cliente */
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 14px;
+    line-height: 1.35;
+    white-space: pre-wrap; /* respeta saltos pero permite envolver */
+    overflow-wrap: anywhere; /* rompe palabras/líneas larguísimas */
+    word-break: break-word; /* backup para navegadores */
+}
+
+.crm-inbox__msg-row--right .crm-inbox__bubble {
+    background: #e8f0fe; /* burbuja agente (azul claro) */
+    border-color: #c7d2fe;
+}
+
+.crm-inbox__meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+.crm-inbox__chat-input {
+    border-top: 1px solid var(--border);
+    padding: 10px;
+    display: flex;
+    gap: 8px;
+    background: var(--panel-2);
+    flex: 0 0 auto;
+}
+
+.crm-inbox__textarea {
+    flex: 1;
+    min-height: 44px;
+    max-height: 120px;
+    resize: vertical;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 10px;
+}
+
+/* ================== Responsive ================== */
+@media (max-width: 1200px) {
+    .crm-inbox {
+        grid-template-columns: 240px 320px 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    .crm-inbox {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .crm-inbox__panel {
+        display: none;
+    }
+
+    .crm-inbox__panel--visible {
+        display: flex;
+    }
+}
+
+/* ================== Fin ================== */
+
+/* ====== Mobile: vista tipo WhatsApp (lista -> chat) ====== */
+
+/* Oculta de entrada el botón back y las tabs (solo mobile las muestra) */
+.crm-inbox__back {
+    display: none;
+}
+
+.crm-inbox__tabs {
+    display: none;
+}
+
+/* Estilos de tabs */
+@media (max-width: 900px) {
+    /* Un solo flujo: o lista o chat */
+    .crm-inbox {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    /* Por defecto ocultamos todos los paneles; mostraremos según estado */
+    .crm-inbox__panel {
+        display: none;
+    }
+
+    /* Estado: ver LISTA */
+    .crm-inbox.crm-inbox--mobile-list .crm-inbox__panel--col2 {
+        display: flex;
+    }
+    /* (Opcional) si quisieras mostrar también la col1 en mobile, descomenta:
+  .crm-inbox.crm-inbox--mobile-list .crm-inbox__panel--col1{ display: flex; }
+  */
+
+    /* Estado: ver CHAT */
+    .crm-inbox.crm-inbox--mobile-chat .crm-inbox__panel--col3 {
+        display: flex;
+    }
+
+    /* Tabs arriba de la lista (sticky) */
+    .crm-inbox__tabs {
+        display: flex;
+        gap: 6px;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f5f7fa;
+        padding: 8px;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .crm-inbox__tab {
+        flex: 1;
+        border: 1px solid var(--border);
+        background: #fff;
+        border-radius: 999px;
+        padding: 8px 10px;
+        font-size: 14px;
+        color: var(--text);
+        cursor: pointer;
+    }
+
+        .crm-inbox__tab.active {
+            background: #eaf3ff;
+            border-color: #bfdbfe;
+            color: #1f2937;
+        }
+
+    /* Botón back dentro del header del chat */
+    .crm-inbox__back {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        margin-right: 6px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--text);
+        font-weight: 700;
+    }
+
+        .crm-inbox__back:active {
+            transform: translateY(1px);
+        }
+}
+
+/* Ya lo muestras en mobile <=900 (lo tienes) */
+/* @media (max-width: 900px) { ... .crm-inbox__back { display:inline-flex; } } */
+/* NEW: show back button from 901px up to 1399px */
+@media (min-width: 901px) and (max-width: 1399px) {
+    .crm-inbox__back {
+        display: inline-flex; /* mismo look & feel del mobile */
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        margin-right: 6px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--text);
+        font-weight: 700;
+    }
+
+        .crm-inbox__back:active {
+            transform: translateY(1px);
+        }
+}
+
+
+/* ====== Estado ACTIVO del hilo en la lista ====== */
+/* Soporta tanto .active como .crm-inbox__thread--active */
+.crm-inbox__thread.active,
+.crm-inbox__thread.crm-inbox__thread--active {
+    background: #eef2f7; /* gris clarito como el ejemplo */
+    border-color: #cbd5e1; /* borde más marcado */
+    box-shadow: inset 0 0 0 1px #e5e7eb; /* levanta el “card” activo */
+    position: relative;
+    transition: background .15s, border-color .15s, box-shadow .15s;
+}
+
+    /* Barra de acento a la izquierda (sutil, opcional) */
+    .crm-inbox__thread.active::before,
+    .crm-inbox__thread.crm-inbox__thread--active::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 8px;
+        bottom: 8px;
+        width: 3px;
+        border-radius: 2px;
+        background: #94a3b8; /* slate-400; si lo quieres azul, usa #3b82f6 */
+    }
+
+    /* Tipografía un poco más fuerte en el activo */
+    .crm-inbox__thread.active .crm-inbox__name,
+    .crm-inbox__thread.crm-inbox__thread--active .crm-inbox__name {
+        color: #0f172a;
+        font-weight: 700;
+    }
+
+    .crm-inbox__thread.active .crm-inbox__preview,
+    .crm-inbox__thread.crm-inbox__thread--active .crm-inbox__preview {
+        color: #475569; /* más oscuro que el resto */
+    }
+
+    /* Avatar del activo un pelín más contrastado */
+    .crm-inbox__thread.active .crm-inbox__avatar,
+    .crm-inbox__thread.crm-inbox__thread--active .crm-inbox__avatar {
+        background: #e5e7eb;
+        border-color: #cbd5e1;
+    }
+
+    /* Que el hover NO pise el activo */
+    .crm-inbox__thread.active:hover,
+    .crm-inbox__thread.crm-inbox__thread--active:hover {
+        background: #eef2f7;
+    }
+
+/* Accesibilidad: si haces focus con teclado que se note igual */
+.crm-inbox__thread:focus-within.active,
+.crm-inbox__thread:focus-within.crm-inbox__thread--active {
+    outline: 2px solid rgba(59,130,246,.25);
+    outline-offset: 2px;
+}
+
+/* ===== Paleta estilo WhatsApp ===== */
+:root {
+    --wa-in: #f0f2f5; /* gris entrante */
+    --wa-in-br: #e1e4e8; /* borde gris */
+    --wa-out: #dcf8c6; /* verde saliente clásico */
+    --wa-out-br: #b7e1a1; /* borde verde */
+}
+
+/* Burbuja por defecto = ENTRANTE (gris) */
+.crm-inbox__bubble {
+    max-width: 70%;
+    background: var(--wa-in);
+    border: 1px solid var(--wa-in-br);
+    color: #1f2937;
+    padding: 10px 12px;
+    border-radius: 16px;
+    box-shadow: 0 1px 0 rgba(0,0,0,.04);
+}
+
+/* BURBUJA SALIENTE (agente) – verde WhatsApp */
+.crm-inbox__msg-row--right .crm-inbox__bubble {
+    background: var(--wa-out);
+    border-color: var(--wa-out-br);
+}
+
+/* Alineación y detalles */
+.crm-inbox__msg-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.crm-inbox__msg-row--right {
+    justify-content: flex-end;
+}
+
+    .crm-inbox__msg-row--right .crm-inbox__meta {
+        text-align: right;
+    }
+
+/* Opcional: esquinas diferentes (más WhatsApp) */
+.crm-inbox__bubble {
+    border-top-left-radius: 4px; /* entrante */
+}
+
+.crm-inbox__msg-row--right .crm-inbox__bubble {
+    border-top-right-radius: 4px; /* saliente */
+}
+
+
+/* ===================== Sidebar Inbox – estilo mejorado ===================== */
+.crm-inbox__sidebar {
+    background: #e9edf3; /* gris suave */
+    border-right: 1px solid #dee5ef;
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.crm-inbox__sidebar-title {
+    margin: 4px 6px 12px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #0f172a; /* casi negro */
+}
+
+/* Lista */
+.crm-inbox__menu {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Soporta tanto .menu-item (tu markup) como .crm-inbox__menu-item */
+.crm-inbox__sidebar .menu-item,
+.crm-inbox__sidebar .crm-inbox__menu-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 4px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    color: #0f172a;
+    font-weight: 600;
+    background: #ffffff;
+    border: 1px solid #e5eaf2;
+    box-shadow: 0 1px 0 rgba(16,24,40,.03);
+    cursor: pointer;
+    transition: background .15s, border-color .15s, box-shadow .15s, transform .06s;
+}
+
+    /* Indicador circular sutil al inicio (decorativo) */
+    .crm-inbox__sidebar .menu-item::before,
+    .crm-inbox__sidebar .crm-inbox__menu-item::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #c7d2fe; /* azul suave */
+        box-shadow: inset 0 0 0 2px #e7eeff;
+        margin-right: 2px;
+    }
+
+    /* Hover */
+    .crm-inbox__sidebar .menu-item:hover,
+    .crm-inbox__sidebar .crm-inbox__menu-item:hover {
+        background: #f7fafc;
+        border-color: #d8e2f0;
+        box-shadow: 0 1px 4px rgba(16,24,40,.06);
+    }
+
+    /* Activo */
+    .crm-inbox__sidebar .menu-item.active,
+    .crm-inbox__sidebar .crm-inbox__menu-item.active {
+        background: #eaf3ff; /* celeste claro */
+        border-color: #bfd6ff;
+        box-shadow: inset 0 0 0 1px #cfe0ff;
+    }
+
+        .crm-inbox__sidebar .menu-item.active::before,
+        .crm-inbox__sidebar .crm-inbox__menu-item.active::before {
+            background: #3b82f6; /* azul primario */
+            box-shadow: none;
+        }
+
+/* Contador (badge) */
+.crm-inbox__sidebar .count,
+.crm-inbox__sidebar .crm-inbox__menu-count {
+    margin-left: auto;
+    min-width: 26px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e40af; /* azul más oscuro */
+    background: #eef4ff;
+    border: 1px solid #dbe6ff;
+}
+
+/* Footer del sidebar (botón) */
+.crm-inbox__sidebar-footer {
+    margin-top: auto;
+    padding: 12px 8px;
+}
+
+.crm-inbox__sidebar .crm-inbox__btn {
+    width: 100%;
+    border-radius: 10px;
+    height: 38px;
+    font-weight: 700;
+}
+
+.crm-inbox__sidebar .crm-inbox__btn--primary {
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
+    border-color: #2563eb;
+    color: #fff;
+    box-shadow: 0 6px 12px rgba(59,130,246,.25);
+}
+
+    .crm-inbox__sidebar .crm-inbox__btn--primary:hover {
+        filter: brightness(.98);
+        transform: translateY(-1px);
+    }
+
+
+/* ===== Elimina cualquier raya entre la columna 1 (sidebar CRM) y la 2 ===== */
+
+/* 0) Fondo del módulo y de las dos primeras columnas (ajusta si quieres) */
+.crm-inbox {
+    --crm-bg: #f4f7fb; /* fondo general del módulo */
+    --crm-surface: #eef3fb; /* fondo de columnas 1 y 2 */
+    background: var(--crm-bg) !important;
+    gap: 0 !important;
+    column-gap: 0 !important; /* sin separador del grid */
+}
+
+.crm-inbox__panel--col1,
+.crm-inbox__panel--col2 {
+    background: var(--crm-surface) !important;
+}
+
+/* 1) Quita bordes/sombras que manchen la división */
+.crm-inbox__sidebar,
+.crm-inbox__panel--col1 {
+    border-right: 0 !important;
+    box-shadow: none !important;
+}
+
+.crm-inbox__panel--col2 {
+    border-left: 0 !important;
+    box-shadow: none !important;
+}
+
+    /* 2) Dentro de la lista (col2) evita líneas internas pegadas al borde izquierdo */
+    .crm-inbox__panel--col2 .crm-inbox__toolbar,
+    .crm-inbox__panel--col2 .crm-inbox__items {
+        border-left: 0 !important;
+        box-shadow: none !important;
+    }
+
+    /* 3) Si algún estilo global mete un separador sutil como inset, neutralízalo */
+    .crm-inbox__panel--col1::before,
+    .crm-inbox__panel--col1::after,
+    .crm-inbox__panel--col2::before,
+    .crm-inbox__panel--col2::after {
+        content: none !important;
+    }
+
+/* 4) (Opcional) scrollbar sin “borde” visual pegado al contenido */
+.crm-inbox__items::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+
+/* ====== MOBILE FIX: un solo panel visible a la vez ====== */
+@media (max-width: 900px) {
+    .crm-inbox {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    /* Oculta todas por defecto */
+    .crm-inbox__panel {
+        display: none !important;
+    }
+
+    /* ¡IMPORTANTE!: anula cualquier uso de "--visible" en mobile */
+    .crm-inbox__panel--visible {
+        display: none !important;
+    }
+
+    /* Estado: ver LISTA (columna 2) */
+    .crm-inbox.crm-inbox--mobile-list .crm-inbox__panel--col2 {
+        display: flex !important;
+    }
+
+    /* Asegura que la col1 (sidebar) NO salga en mobile lista */
+    .crm-inbox.crm-inbox--mobile-list .crm-inbox__panel--col1 {
+        display: none !important;
+    }
+
+    /* Estado: ver CHAT (columna 3) */
+    .crm-inbox.crm-inbox--mobile-chat .crm-inbox__panel--col3 {
+        display: flex !important;
+    }
+}
+
+/* Outer (columna 1) con clase crm-inbox__sidebar: sin padding ni fondo */
+.crm-inbox__panel--col1.crm-inbox__sidebar {
+    padding: 0 !important;
+    background: #e9edf3 !important; /* color plano hasta abajo */
+    border-right: 0 !important;
+}
+
+    /* Inner (la que está dentro del componente InboxSidebar) */
+    .crm-inbox__panel--col1.crm-inbox__sidebar > .crm-inbox__sidebar {
+        background: transparent !important;
+        padding: 16px 12px;
+        min-height: 100%;
+        border-right: 0 !important;
+    }
+
+/* === ThreadList: que TODA la columna 2 tenga el mismo fondo que los espacios entre cards === */
+
+/* La columna 2 completa (cabecera + scroll + fondo) */
+.crm-inbox__panel--col2 {
+    /* mismo gris claro que usas detrás de los ítems */
+    background: #f5f7fa !important;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* El contenedor de la lista ocupa todo el alto */
+.crm-inbox__threadlist {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    /* hereda el mismo fondo para evitar “parches” */
+    background: #f5f7fa !important;
+}
+
+/* Toolbar arriba con el mismo fondo */
+.crm-inbox__toolbar {
+    background: #f5f7fa !important;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Área scrolleable (entre y debajo de los cards) con el mismo fondo */
+.crm-inbox__items {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    background: #f5f7fa !important;
+    /* opcional: deja un respiro abajo para que no se pegue al borde */
+    padding-bottom: 16px;
+}
+
+/* Elimina cualquier pseudo-borde que algún estilo global pudiera inyectar */
+.crm-inbox__panel--col2::before,
+.crm-inbox__panel--col2::after {
+    content: none !important;
+}
+
+/* Para marcar como Leido y No Leido los mensajes*/
+.crm-inbox__thread.unread .crm-inbox__name {
+    font-weight: 700;
+}
+
+.crm-inbox__thread.unread .crm-inbox__preview {
+    font-weight: 600;
+    opacity: 0.95;
+}
+
+.badge-unread {
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 11px;
+    border-radius: 999px;
+    background: var(--primary, #2563eb);
+    color: #fff;
+}
+
+/* Columna derecha en vertical, alineada a la derecha */
+.crm-inbox__rmeta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 54px; /* evita saltos raros */
+}
+
+/* Burbuja estilo WhatsApp (número de no leídos) */
+.unread-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #25D366; /* verde WA; puedes usar var(--success) */
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 22px;
+}
+
+/* (opcional) resalta items no leídos */
+.crm-inbox__thread.unread .crm-inbox__name {
+    font-weight: 700;
+}
+
+.crm-inbox__thread.unread .crm-inbox__preview {
+    font-weight: 600;
+    opacity: .95;
+}
+
+/* MODAL */
+/* ——— Overlay bonito sobre todo ——— */
+.overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 100000; /* por encima del sidebar sticky */
+    background: rgba(9,12,20,.45);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    animation: overlay-fade .18s ease-out;
+}
+
+/* ——— Contenedor del modal ——— */
+.modal {
+    top: 70px;
+    width: min(760px, 92vw);
+    /*max-height: min(86vh, 100dvh - 32px);*/
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e7ecf4;
+    box-shadow: 0 24px 48px rgba(2,6,23,.2), 0 8px 20px rgba(2,6,23,.12);
+    margin: 28px auto 12px; /* top 28px, bottom 12px */
+    max-height: calc(100dvh - 240px); /* 28 + 12 = 40px */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateY(6px) scale(.98);
+    animation: modal-in .18s ease-out forwards;
+    position: relative; /* por si usas sombras/menus dentro */
+    z-index: 100001;
+    height: auto !important; /* se ajusta al contenido */
+}
+
+/* ——— Header & Footer fijos; body scrolleable ——— */
+.modal__header {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    border-bottom: 1px solid #eef2f7;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.modal__title {
+    font-weight: 800;
+    letter-spacing: .2px;
+    color: #0f172a;
+}
+
+.modal__spacer {
+    flex: 1;
+}
+
+.modal__body {
+    padding: 10px 16px;
+    overflow: auto !important;
+    min-height: 0 !important;
+    background: linear-gradient(#fff,#fff);
+}
+
+.modal__footer {
+    padding: 12px 16px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    background: #fff;
+    border-top: 1px solid #eef2f7;
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+}
+
+/* ——— Grupos ——— */
+.modal__group {
+    border: 1px solid #eef2f7;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.modal__group-title {
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 8px;
+}
+
+/* ——— Radio row bonito ——— */
+.radio-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background .12s, box-shadow .12s, border-color .12s;
+    background: #fff;
+    border: 1px solid #e5eaf2;
+}
+
+    .radio-row:hover {
+        background: #f9fbff;
+        border-color: #dbe6ff;
+    }
+
+    .radio-row:focus-within {
+        box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    }
+
+    .radio-row input[type="radio"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2px solid #94a3b8;
+        background: #fff;
+        display: grid;
+        place-items: center;
+        transition: border-color .12s, background .12s;
+    }
+
+        .radio-row input[type="radio"]::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: transparent;
+            transition: background .12s;
+        }
+
+        .radio-row input[type="radio"]:checked {
+            border-color: #2563eb;
+            background: #fff;
+        }
+
+            .radio-row input[type="radio"]:checked::before {
+                background: #2563eb;
+            }
+
+    .radio-row .radio-text {
+        color: #0f172a;
+    }
+
+    .radio-row input[type="radio"]:checked + .radio-text strong {
+        color: #1d4ed8;
+    }
+
+
+
+
+/* ——— Botones ——— */
+.btn {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #0f172a;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background .12s, transform .04s, border-color .12s;
+}
+
+    .btn:hover {
+        background: #f8fafc;
+        border-color: #d1d5db;
+    }
+
+    .btn:active {
+        transform: translateY(1px);
+    }
+
+.btn-primary {
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
+    color: #fff;
+    border-color: #2563eb;
+    box-shadow: 0 8px 16px rgba(37,99,235,.22);
+}
+
+    .btn-primary:hover {
+        filter: brightness(.98);
+    }
+
+.btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: #475569;
+}
+
+    .btn-ghost:hover {
+        background: #f1f5f9;
+    }
+
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
+}
+
+/* ——— Empty state ——— */
+.empty-state {
+    text-align: center;
+    padding: 28px 8px;
+    color: #64748b;
+}
+
+.empty-title {
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 4px;
+}
+
+.empty-desc {
+    font-size: 14px;
+}
+
+/* ——— Animaciones ——— */
+@keyframes overlay-fade {
+    from {
+        opacity: 0
+    }
+
+    to {
+        opacity: 1
+    }
+}
+
+@keyframes modal-in {
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+
+    from {
+        transform: translateY(6px) scale(.98);
+        opacity: .98;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .overlay, .modal {
+        animation: none !important;
+    }
+}
+
+
+.muted {
+    color: #6b7280;
+}
+
+/* Badge "Asignado a ..." */
+.crm-inbox__assignee-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: 11px; /* un poco más pequeña */
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9999px; /* pill */
+    background: var(--assignee-bg, #eef6ff);
+    color: var(--assignee-fg, #1d4ed8); /* azul */
+    margin: 2px 0 4px;
+}
+
+    .crm-inbox__assignee-badge i {
+        font-size: 12px;
+    }
+
+/* Preview compacto con ellipsis (por si viene largo) */
+.crm-inbox__preview {
+    font-size: 13px;
+    color: var(--muted);
+    /* multi-línea con elipsis */
+    display: -webkit-box;
+    -webkit-line-clamp: 2; /* máximo 2 líneas */
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
+    /* previene desbordes con palabras muy largas/URLs */
+    overflow-wrap: anywhere; /* o: break-word; */
+    word-break: break-word;
+}
+
+/* (Opcional) Si prefieres 2 líneas con ellipsis, comenta white-space arriba y descomenta aquí
+.crm-inbox__preview{
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+*/
+
+
+
+
+/* El contenedor del contenido (último hijo): que pueda achicarse y tenga un ancho máximo */
+.crm-inbox__msg-row > div:last-child,
+.crm-inbox__msg-row > .msg {
+    min-width: 0; /* CLAVE: permite que el flex item se encoja */
+    max-width: 75%; /* limita ancho de burbuja+meta respecto al panel */
+}
+
+/* Para mensajes del agente (a la derecha): empuja el contenido al borde derecho */
+.crm-inbox__msg-row--right {
+    justify-content: flex-end;
+}
+
+    .crm-inbox__msg-row--right > div:last-child,
+    .crm-inbox__msg-row--right > .msg {
+        margin-left: auto; /* cinturón y tirantes */
+    }
+
+/* La burbuja */
+.crm-inbox__bubble {
+    display: inline-block;
+    max-width: 100%; /* que respete el max del contenedor */
+    padding: 8px 12px;
+    border-radius: 14px;
+    line-height: 1.35;
+    /* envolver texto y URLs largas */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere; /* rompe palabras/url larguísimas */
+    word-break: break-word;
+}
+
+
+
+.crm-inbox__msg-row--right .crm-inbox__bubble {
+    background: #d9f0c2; /* agente */
+    color: #123;
+}
+
+/* Contenedor del scroll del chat (por si hace falta) */
+.crm-inbox__chat-body {
+    overflow: auto;
+}
+
+/* Header fijo dentro del panel de chat */
+.crm-inbox__chat-header {
+    position: sticky;
+    top: 0;
+    z-index: 5; /* por encima de las burbujas */
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--border); /* refuerza el borde al flotar */
+}
+
+
+
+
+
+/* —— OUTER: fija la columna 1 a alto de pantalla, independiente del chat —— */
+.crm-inbox__panel--col1.crm-inbox__sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* o 100dvh si prefieres dinámico en móviles */
+    max-height: 100vh;
+    overflow: hidden; /* evita que el contenido estire el panel */
+}
+
+/* Usa 100dvh cuando esté disponible (mejor en iOS/Android) */
+@supports (height: 100dvh) {
+    .crm-inbox__panel--col1.crm-inbox__sidebar {
+        min-height: 100dvh;
+        max-height: 100dvh;
+    }
+}
+
+/* —— INNER ROOT del componente InboxSidebar —— */
+/* Ojo: en tu CSS ya tienes una regla para
+   ".crm-inbox__panel--col1.crm-inbox__sidebar > .crm-inbox__sidebar".
+   La sobrescribimos aquí para que LLENE el alto y no lo fuerce a 100%. */
+.crm-inbox__panel--col1.crm-inbox__sidebar > .crm-inbox__sidebar {
+    flex: 1 1 auto;
+    min-height: 0 !important; /* anula el min-height:100% que tenías */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* el scroll va dentro de .sidebar-content */
+    padding: 16px 12px; /* conserva tu padding */
+    background: transparent !important;
+    border-right: 0 !important;
+}
+
+/* —— SCROLL SOLO EN EL CONTENIDO —— */
+.crm-inbox__sidebar .sidebar-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+}
+
+    /* Scrollbar bonito (opcional) */
+    .crm-inbox__sidebar .sidebar-content::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .crm-inbox__sidebar .sidebar-content::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,.2);
+        border-radius: 4px;
+    }
+
+        .crm-inbox__sidebar .sidebar-content::-webkit-scrollbar-thumb:hover {
+            background: rgba(0,0,0,.3);
+        }
+
+/* El footer queda “pegado” al fondo del sidebar */
+.crm-inbox__sidebar-footer {
+    margin-top: auto; /* ya lo tenías, esto lo asegura */
+}
+
+
+/* Altura real del header superior de tu app */
+:root {
+    --app-header-h: 81px;
+}
+/* cambia a 56px/72px si tu barra mide otra cosa */
+
+/* El DIV interno del componente InboxSidebar llena la ventana MENOS el header */
+.crm-inbox__panel--col1.crm-inbox__sidebar > .crm-inbox__sidebar {
+    height: calc(100dvh - var(--app-header-h));
+    max-height: calc(100dvh - var(--app-header-h));
+    min-height: 0 !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* el scroll vive en el menú */
+}
+
+/* Título fijo, menú scrolleable, footer siempre visible */
+.crm-inbox__sidebar-title {
+    flex: 0 0 auto;
+}
+
+.crm-inbox__menu {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.crm-inbox__sidebar-footer {
+    flex: 0 0 auto;
+    margin-top: auto; /* pegado abajo */
+}
+
+/* (opcional) scrollbar del menú */
+.crm-inbox__menu::-webkit-scrollbar {
+    width: 8px;
+}
+
+.crm-inbox__menu::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,.2);
+    border-radius: 4px;
+}
+
+    .crm-inbox__menu::-webkit-scrollbar-thumb:hover {
+        background: rgba(0,0,0,.3);
+    }
+
+/* ——— Sidebar SIN scroll interno ——— */
+.crm-inbox__panel--col1.crm-inbox__sidebar > .crm-inbox__sidebar {
+    overflow: hidden !important; /* nada scrollea aquí */
+}
+
+.crm-inbox__sidebar .sidebar-content {
+    overflow: hidden !important; /* anulamos el auto que pusimos antes */
+}
+
+.crm-inbox__sidebar .crm-inbox__menu {
+    overflow: hidden !important; /* el menú tampoco scrollea */
+}
+
+/* Evita “arrastre”/rebote táctil dentro del sidebar */
+.crm-inbox__panel--col1.crm-inbox__sidebar,
+.crm-inbox__sidebar {
+    overscroll-behavior: none;
+}
+
+    /* (Opcional) si Safari aún muestra la barrita fantasma */
+    .crm-inbox__sidebar .crm-inbox__menu::-webkit-scrollbar {
+        display: none;
+    }
+
+
+/* Sidebar (columna 1) independiente de la scroll de la página */
+.crm-inbox__panel--col1.crm-inbox__sidebar {
+    position: sticky; /* se fija respecto al viewport/página */
+    top: 0;
+    /*  top: var(--app-header-h);*/ /* queda justo debajo del header fijo */
+    height: calc(100dvh - var(--app-header-h));
+    max-height: calc(100dvh - var(--app-header-h));
+    min-height: 0;
+    overflow: hidden !important;
+    /* sin scroll interno por ahora */
+    z-index: 2; /* opcional, por si se solapa con algo */
+}
+
+    /* El contenedor interno del componente NO debe forzar alturas raras */
+    .crm-inbox__panel--col1.crm-inbox__sidebar > .crm-inbox__sidebar {
+        flex: 1 1 auto;
+        min-height: 0 !important;
+        overflow: hidden !important; /* bloquea cualquier scroll interno */
+    }
+
+/* Si agregaste .sidebar-content antes, bloquea su scroll también */
+.crm-inbox__sidebar .sidebar-content,
+.crm-inbox__sidebar .crm-inbox__menu {
+    overflow: hidden !important;
+}
+
+.crm-inbox__panel--col2,
+.crm-inbox__panel--col3 {
+    position: sticky;
+    /*top: var(--app-header-h);*/
+    top: 0;
+    height: calc(100dvh - var(--app-header-h));
+    max-height: calc(100dvh - var(--app-header-h));
+    min-height: 0;
+    overflow: hidden !important;
+    /* su scroll va SOLO en sus áreas internas */
+}
+
+/* ThreadList: que solo scrollee la lista */
+.crm-inbox__items {
+    overflow: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* ChatView: que solo scrollee el cuerpo */
+.crm-inbox__chat {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.crm-inbox__chat-body {
+    overflow: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.crm-inbox__assignee {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+.crm-inbox__msg-row {
+    display: flex;
+    gap: .5rem;
+    margin: .25rem 0;
+}
+
+.crm-inbox__msg-row--right {
+    justify-content: flex-end;
+}
+
+.crm-inbox__bubble {
+    padding: .5rem .75rem;
+    border-radius: 12px;
+    max-width: 75%;
+}
+
+.crm-inbox__bubble--in {
+    background: #f2f2f2;
+}
+
+.crm-inbox__bubble--out {
+    background: #d7ebff;
+}
+/* o lo que uses para “yo” */
+
+/* Contenedor de chips/tags en el header */
+.crm-inbox__header-tags {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    /* en móvil que no se rompa el layout */
+    margin-left: auto;
+}
+
+/* Tag base con estilo pill */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .25rem .6rem;
+    border-radius: 9999px;
+    border: 1px solid var(--tag-border,#e5e7eb);
+    background: var(--tag-bg,#f7f7f8);
+    color: var(--tag-fg,#4b5563);
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* “Parecido” a crm-inbox__meta: tipografía pequeña y sutil */
+.tag--meta {
+    font-size: .78rem;
+    line-height: 1.2;
+    letter-spacing: .01em;
+    color: var(--tag-fg,#6b7280);
+}
+
+/* Iconito dentro del tag */
+.tag__icon {
+    opacity: .8;
+    font-size: .9em;
+    line-height: 1;
+}
+
+/* Colores por tipo */
+.tag--company {
+    --tag-bg: #eef2ff; /* lavanda suave */
+    --tag-border: #dbe1ff;
+    --tag-fg: #273f8c;
+}
+
+.tag--assignee {
+    --tag-bg: #ecfdf5; /* verde suave */
+    --tag-border: #cde9dd;
+    --tag-fg: #14532d;
+}
+
+/* Botón “chip” a juego */
+.btn--tag {
+    padding: .28rem .7rem;
+    border-radius: 9999px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #374151;
+    font-size: .78rem;
+    line-height: 1.2;
+}
+
+    .btn--tag:hover {
+        background: #f9fafb;
+    }
+
+/* Responsive: en pantallas chicas, que ocupen el ancho y se vean limpios */
+@media (max-width: 640px) {
+    .crm-inbox__header-tags {
+        gap: .4rem;
+    }
+
+    .tag, .btn--tag {
+        font-size: .76rem;
+    }
+
+    .tag__text {
+        max-width: 60vw;
+    }
+    /* evita desbordes de nombres largos */
+}
+/* ——— Lado derecho del header ——— */
+.crm-inbox__header-right {
+    margin-left: auto; /* empuja este bloque a la derecha */
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    min-width: 0;
+}
+
+/* Texto sobrio, estilo meta */
+.crm-inbox__company,
+.crm-inbox__assignee {
+    font-size: .78rem;
+    line-height: 1.2;
+    letter-spacing: .01em;
+    color: #6b7280; /* gris medio elegante */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 40ch; /* evita desbordes largos en desktop */
+}
+
+/* “DATA”: un poco más protagonista */
+.crm-inbox__company {
+    color: #111827;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+/* Botón discreto */
+.btn--reassign {
+    flex: 0 0 auto;
+    padding: .28rem .7rem;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #374151;
+    font-size: .78rem;
+    line-height: 1.2;
+}
+
+    .btn--reassign:hover {
+        background: #f9fafb;
+    }
+
+/* ——— SOLO MOBILE: apilar y alinear a la derecha ——— */
+@media (max-width:640px) {
+    .crm-inbox__header-right {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: .25rem;
+        max-width: 60%; /* no invadir el bloque izquierdo */
+    }
+
+    .crm-inbox__company,
+    .crm-inbox__assignee {
+        max-width: 100%;
+        text-align: right;
+        white-space: normal; /* permite 2 líneas si hace falta */
+    }
+
+    .btn--reassign {
+        align-self: flex-end;
+        width: auto;
+    }
+}
+
+
+
+/* Contenedor izquierdo del header (avatar + texto) */
+.crm-inbox__header-left {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    min-width: 0; /* permite que el nameblock haga ellipsis */
+}
+
+/* Bloque de nombre/meta a la derecha del avatar */
+.crm-inbox__nameblock {
+    display: flex;
+    flex-direction: column;
+    min-width: 0; /* clave para que no salte de línea */
+}
+
+.crm-inbox__name, .crm-inbox__meta {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Hacerlo clicable con accesibilidad */
+.clickwrap {
+    cursor: pointer;
+    user-select: none;
+}
+
+    .clickwrap:focus-visible {
+        outline: 2px solid #94a3b8;
+        outline-offset: 2px;
+        border-radius: 8px;
+    }
+
+/* Evita que el avatar se estire y que el texto tome el resto */
+.crm-inbox__avatar {
+    flex: 0 0 auto;
+}
+
+.crm-inbox__nameblock {
+    flex: 1 1 auto;
+}
+
+
+/* --- Modal tamaño y espaciados --- */
+.modal--contact {
+    width: min(680px, 92vw);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.12);
+}
+
+.modal__title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.modal__title-icon {
+    font-size: 1.2rem;
+}
+
+/* --- Grid del formulario --- */
+.form-grid {
+    display: grid;
+    gap: 14px 18px;
+    grid-template-columns: 160px 1fr;
+    align-items: center;
+}
+
+.form-row {
+    display: contents;
+}
+/* cada par label+control ocupa la fila */
+.form-label {
+    justify-self: end;
+    text-align: right;
+    color: #475569;
+    font-size: .9rem;
+    line-height: 1.3;
+    padding-top: .2rem;
+    white-space: nowrap;
+}
+
+/* --- Controles pro --- */
+.input-pro {
+    width: 100%;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: .6rem .75rem;
+    font-size: .95rem;
+    color: #0f172a;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+    .input-pro::placeholder {
+        color: #9aa0a6;
+    }
+
+    .input-pro:focus {
+        outline: 0;
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 3px rgba(96,165,250,.25);
+    }
+
+/* Sólo lectura tipo “pill” sobrio */
+.pill-readonly {
+    display: inline-flex;
+    align-items: center;
+    padding: .5rem .75rem;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #1f2937;
+    border: 1px solid #eef2f7;
+    font-size: .92rem;
+}
+
+/* Footer con botones separados a los extremos */
+.modal__footer--split {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Hint */
+.form-hint {
+    margin-top: 12px;
+    color: #6b7280;
+    font-size: .85rem;
+}
+
+/* --- Responsive --- */
+@media (max-width: 700px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .form-label {
+        justify-self: start;
+        text-align: left;
+        padding: 0 0 .25rem;
+    }
+
+    .pill-readonly {
+        width: 100%;
+    }
+}
+
+/* Botones (si tu tema no los define así) */
+.btn.btn-ghost {
+    background: transparent;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+    padding: .55rem .9rem;
+    border-radius: 10px;
+}
+
+    .btn.btn-ghost:hover {
+        background: #f9fafb;
+    }
+
+.btn-brand.btn-brand-success {
+    background: #16a34a;
+    color: #fff;
+    border: 1px solid #0e8a3d;
+    border-radius: 10px;
+    padding: .55rem 1rem;
+}
+
+    .btn-brand.btn-brand-success:hover {
+        background: #13913f;
+    }
+
+.btn-brand-danger {
+    background: var(--brand-danger);
+}
+
+    .btn-brand-danger:hover {
+        background: var(--brand-danger-hover);
+    }
+
+.btn-brand.btn-brand-primary {
+    background: #2563eb !important; /* azul vivo */
+    border-color: #2563eb !important;
+    color: #fff !important;
+    border: 1px solid #1e40af; /* borde un poco más oscuro */
+    border-radius: 10px;
+    padding: .55rem 1rem;
+    box-shadow: 0 8px 16px rgba(37,99,235,.18);
+}
+
+btn.btn-brand.btn-brand-primary:hover,
+.btn.btn-brand.btn-brand-primary:focus {
+    background: #1e40ff !important; /* más intenso, nada de gris */
+    border-color: #1b36e6 !important;
+    color: #fff !important;
+}
+
+.btn.btn-brand.btn-brand-primary:active {
+    background: #1b36e6 !important;
+    border-color: #172ec7 !important;
+    transform: translateY(1px);
+}
+
+.btn.btn-brand.btn-brand-primary:disabled {
+    background: #6aa6ff !important;
+    border-color: #6aa6ff !important;
+    color: #fff !important;
+    opacity: .75;
+    cursor: not-allowed;
+}
+
+
+/* ---------- 900px–1399px: 2 columnas (oculta InboxSidebar) ---------- */
+/* ====== TABLET: 900–1399px → comportamiento tipo mobile (un panel a la vez) ====== */
+@media (min-width: 900px) and (max-width: 1399.98px) {
+    .crm-inbox {
+        display: grid !important;
+        grid-template-columns: 1fr !important; /* una sola columna */
+        height: auto !important;
+        overflow: hidden !important;
+    }
+
+    /* oculta todos los paneles por defecto (como en mobile) */
+    .crm-inbox__panel {
+        display: none !important;
+    }
+
+    /* nunca mostramos la col1 (sidebar) en este rango */
+    .crm-inbox__panel--col1 {
+        display: none !important;
+    }
+
+    /* Estado: ver LISTA (por defecto _mobileShowChat = false) */
+    .crm-inbox.crm-inbox--mobile-list .crm-inbox__panel--col2 {
+        display: flex !important;
+    }
+
+    /* Estado: ver CHAT (cuando seleccionas un hilo) */
+    .crm-inbox.crm-inbox--mobile-chat .crm-inbox__panel--col3 {
+        display: flex !important;
+    }
+
+    /* El overlay ya no cubre el viewport, solo el área del CRM */
+    .crm-inbox .overlay {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 1000 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: rgba(9,12,20,.45) !important;
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+    }
+
+    /* El modal usa % del ancho del CRM (no vw), sin empujar a los lados */
+    .crm-inbox .modal {
+        position: relative !important;
+        top: auto !important;
+        margin: 24px auto !important;
+        width: min(720px, calc(100% - 32px)) !important; /* 16px de margen a cada lado */
+        max-width: calc(100% - 32px) !important;
+        overflow: hidden !important;
+        z-index: 1001 !important;
+    }
+
+    /* Header y footer sticky ya los tienes; asegura el scroll SOLO en body */
+    .crm-inbox .modal__body {
+        overflow: auto !important;
+        min-height: 0 !important;
+    }
+}
+
+
+/* ====== >= 1400px: 3 columnas, modal siempre por encima de col1 ====== */
+@media (min-width: 1400px) {
+    /* El CRM actúa como reference box del overlay */
+    .crm-inbox {
+        position: relative;
+    }
+
+        /* Overlay y modal limitados al área del CRM (no al viewport) */
+        .crm-inbox .overlay {
+            position: absolute !important;
+            inset: 0 !important;
+            z-index: 1000 !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(9,12,20,.45);
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+        }
+
+        .crm-inbox .modal {
+            position: relative !important;
+            margin: 32px auto 16px !important;
+            width: min(760px, 88%) !important;
+            overflow: hidden;
+            z-index: 1001 !important;
+        }
+
+    /* ⚑ FIX de stacking: mientras el modal esté abierto,
+     la col3 (donde vive el overlay) se dibuja por encima de la col1 */
+    .crm-inbox--modal-open .crm-inbox__panel--col3 {
+        position: relative; /* crea stacking context */
+        z-index: 3; /* > col1 */
+    }
+
+    .crm-inbox--modal-open .crm-inbox__panel--col2 {
+        position: relative;
+        z-index: 2; /* por si el modal lo abres desde col2 en el futuro */
+    }
+    /* Baja la prioridad visual del sidebar */
+    .crm-inbox__panel--col1.crm-inbox__sidebar {
+        z-index: 1 !important; /* antes lo tenías en 2 */
+    }
+
+    /* Anti overflow lateral preventivo */
+    .crm-inbox,
+    .crm-inbox__panel,
+    .crm-inbox__panel--col2,
+    .crm-inbox__panel--col3 {
+        min-width: 0 !important;
+    }
+}
+
+
+/* Contenido dentro del bubble */
+.msg-text {
+    margin-top: 6px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Miniatura de imagen */
+.msg-thumb {
+    display: block;
+    max-width: 160px; /* <<< tamaño miniatura */
+    max-height: 160px; /* evita que se alargue */
+    width: auto;
+    height: auto;
+    border-radius: 8px;
+    object-fit: cover;
+    box-shadow: 0 1px 2px rgba(0,0,0,.08);
+}
+
+/* Link que envuelve la miniatura */
+.msg-attach-link {
+    display: inline-block;
+    line-height: 0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Chip para archivos no-imagen */
+.msg-attach-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(0,0,0,.05);
+    border-radius: 10px;
+    text-decoration: none;
+    color: inherit;
+    max-width: 260px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+    .msg-attach-chip:hover {
+        background: rgba(0,0,0,.08);
+    }
+
+.msg-attach-icon {
+    font-size: 14px;
+    opacity: .8;
+}
+
+.msg-attach-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.msg-attach-mime {
+    font-size: 12px;
+    opacity: .6;
+}
+
+
+/* 🔽 Antes: max-width: 900px — Ahora: hasta 1399.98px */
+@media (max-width: 1399.98px) {
+    .crm-inbox__tabs {
+        display: flex;
+    }
+}
+
+/* ThreadList.razor.css (o tu css global) */
+/* Base */
+.crm-inbox__toolbar .search {
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #d1d5db; /* gris claro */
+    border-radius: 8px;
+    background: #fff;
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+    outline: none; /* quitamos el outline por defecto */
+}
+
+    /* Focus suave (azul grisáceo) */
+    .crm-inbox__toolbar .search:focus,
+    .crm-inbox__toolbar .search:focus-visible {
+        border-color: #60a5fa; /* azul suave */
+        box-shadow: 0 0 0 3px rgba(96,165,250,.25); /* halo discreto */
+        background-color: #f9fbff; /* leve tinte */
+    }
+
+    /* Hover sutil (opcional) */
+    .crm-inbox__toolbar .search:hover:not(:focus) {
+        border-color: #9ca3af; /* un poco más marcado al pasar el mouse */
+    }
+
+    /* Placeholder al enfocar (opcional) */
+    .crm-inbox__toolbar .search:focus::placeholder {
+        color: #93a3b5;
+    }
+
+/* Accesibilidad: si el usuario pide contraste alto, quita el halo difuso y usa outline */
+@media (prefers-contrast: more) {
+    .crm-inbox__toolbar .search:focus,
+    .crm-inbox__toolbar .search:focus-visible {
+        box-shadow: none;
+        outline: 3px solid #2563eb; /* contorno definido */
+        outline-offset: 2px;
+    }
+}
+
+
+/* --- Sort pill --- */
+.pill-dropdown.sort {
+    position: relative;
+    margin-left: 8px;
+}
+
+.pill-btn {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.pill-caret {
+    margin-left: 6px;
+    opacity: .7;
+}
+
+.pill-menu {
+    position: absolute;
+    right: 0;
+    margin-top: 6px;
+    min-width: 180px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    z-index: 10;
+    padding: 6px 0;
+}
+
+.pill-option {
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+    .pill-option:hover {
+        background: #f3f4f6;
+    }
+
+    .pill-option.selected {
+        background: #eef2ff;
+        color: #3730a3;
+        font-weight: 700;
+    }
+
+
+
+/* Tabs en forma de pills SOLO bajo 1400px */
+/* Pills para tabs dentro de la lista (solo < 1400px) */
+@media (max-width: 1399px) {
+
+    /* Contenedor de tabs */
+    .crm-inbox__threadlist .crm-inbox__tabs {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 12px;
+        background: #f7f9fc;
+        border-bottom: 1px solid var(--border, #e5e7eb);
+    }
+
+        /* Selecciona cada botón tab. 
+     Usamos 2 selectores por si la clase sale concatenada como "crm-inbox__tab active" */
+        .crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab,
+        .crm-inbox__threadlist .crm-inbox__tabs [class^="crm-inbox__tab"],
+        .crm-inbox__threadlist .crm-inbox__tabs [class*=" crm-inbox__tab"] {
+            appearance: none;
+            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            color: #334155; /* slate-700 */
+            border-radius: 9999px; /* pill */
+            padding: 8px 14px;
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .04s ease;
+        }
+
+            .crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab:hover,
+            .crm-inbox__threadlist .crm-inbox__tabs [class^="crm-inbox__tab"]:hover,
+            .crm-inbox__threadlist .crm-inbox__tabs [class*=" crm-inbox__tab"]:hover {
+                background: #f8fafc;
+                border-color: #dbeafe;
+            }
+
+            .crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab:focus-visible,
+            .crm-inbox__threadlist .crm-inbox__tabs [class^="crm-inbox__tab"]:focus-visible,
+            .crm-inbox__threadlist .crm-inbox__tabs [class*=" crm-inbox__tab"]:focus-visible {
+                outline: 0;
+                box-shadow: 0 0 0 3px rgba(59,130,246,.25);
+                border-color: #93c5fd;
+            }
+
+            /* ACTIVO: cuando Razor agregue " active" */
+            .crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab.active,
+            .crm-inbox__threadlist .crm-inbox__tabs [class^="crm-inbox__tab"].active,
+            .crm-inbox__threadlist .crm-inbox__tabs [class*=" crm-inbox__tab"].active {
+                background: #1d4ed8; /* azul */
+                border-color: #1d4ed8;
+                color: #ffffff;
+            }
+
+    /* En móviles reparte el ancho */
+    @media (max-width: 900px) {
+        .crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab,
+        .crm-inbox__threadlist .crm-inbox__tabs [class^="crm-inbox__tab"],
+        .crm-inbox__threadlist .crm-inbox__tabs [class*=" crm-inbox__tab"] {
+            flex: 1;
+            justify-content: center;
+            text-align: center;
+        }
+    }
+}
+
+
+/* Base pill */
+.crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab {
+    appearance: none;
+    border: 1px solid #e5e7eb;
+    background: #ffffff;
+    color: #334155; /* slate-700 */
+    border-radius: 9999px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+    .crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab:hover {
+        background: #f1f5f9; /* slate-100 */
+        border-color: #cbd5e1; /* slate-300 */
+    }
+
+    /* ACTIVO */
+    .crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab.active {
+        background: #1d4ed8; /* azul fuerte */
+        border-color: #1d4ed8;
+        color: #ffffff;
+        box-shadow: 0 2px 0 rgba(29,78,216,.20) inset;
+    }
+
+    /* Accesibilidad al foco */
+    .crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab:focus-visible {
+        outline: 0;
+        box-shadow: 0 0 0 3px rgba(59,130,246,.25);
+        border-color: #93c5fd;
+    }
+
+/* En móviles reparte el ancho */
+@media (max-width: 900px) {
+    .crm-inbox__threadlist .crm-inbox__tabs .crm-inbox__tab {
+        flex: 1;
+        justify-content: center;
+        text-align: center;
+    }
+}

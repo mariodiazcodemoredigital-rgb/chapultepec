@@ -59,51 +59,6 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
             }
         }
 
-        // Reemplaza ProcessAsync por esta versión defensiva
-        private string ComputeSha256HexSafe(string input)
-        {
-            using var sha = System.Security.Cryptography.SHA256.Create();
-            var bytes = Encoding.UTF8.GetBytes(input ?? "");
-            var hash = sha.ComputeHash(bytes);
-            return Convert.ToHexString(hash).ToLowerInvariant();
-        }
-
-        private async Task SaveDeadLetterFallbackAsync(string raw, string error, CancellationToken ct)
-        {
-            try
-            {
-                // Intentar guardar en archivo como fallback
-                var path = _cfg?["WebhookDebug:DeadLetterPath"] ?? "deadletters_fallback.log";
-                var entry = new
-                {
-                    OccurredUtc = DateTime.UtcNow,
-                    Error = error,
-                    Raw = TryParseJsonOrString(raw),
-                };
-                var line = JsonSerializer.Serialize(entry) + Environment.NewLine;
-                lock (typeof(MessageProcessingService))
-                {
-                    File.AppendAllText(path, line, Encoding.UTF8);
-                }
-                _log.LogWarning("Saved dead-letter to file fallback: {path}", path);
-            }
-            catch (Exception ex)
-            {
-                _log.LogError(ex, "Failed to write dead-letter to fallback file");
-            }
-        }
-
-        private object TryParseJsonOrString(string raw)
-        {
-            try
-            {
-                return JsonSerializer.Deserialize<JsonElement>(raw);
-            }
-            catch
-            {
-                return raw;
-            }
-        }
 
         private async Task ProcessAsync(IncomingMessageDto dto, CancellationToken ct)
         {

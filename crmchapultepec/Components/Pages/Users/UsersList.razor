@@ -1,0 +1,326 @@
+﻿@page "/users"
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using crmchapultepec.data.Data
+@using crmchapultepec.services.Interfaces.UsersService
+@using Radzen
+@using Radzen.Blazor
+
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject IUsersService UsersService
+
+@* @attribute [Authorize] *@
+@rendermode InteractiveServer
+
+<CascadingAuthenticationState>
+    <h3>Gestión de Usuarios</h3>
+
+
+    @* Botón nuevo: skeleton mientras carga; luego botón real *@
+    @if (_loading)
+    {
+
+    }
+    else
+    {
+        @if (!EsUsuarioSistema)
+        {
+            <RadzenButton Icon="add_circle_outline" Text="Nuevo Usuario"
+                          Style="margin-bottom:10px" ButtonStyle="ButtonStyle.Primary"
+                          Click="@CrearUsuario" />
+        }
+    }
+
+    @* Contenido principal: skeleton mientras carga; grid cuando termine *@
+    @if (_loading)
+    {
+        <RadzenCard Style="min-height:260px; display:flex; align-items:center; justify-content:center;">
+            <div style="text-align:center">
+                <RadzenProgressBarCircular Mode="ProgressBarMode.Determinate"
+                                           Size="ProgressBarCircularSize.Large"
+                                           Value="@_progress" />
+            </div>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenDataGrid TItem="ApplicationUser" Data="@usuarios" @ref="grid"
+                        AllowFiltering="true" AllowPaging="true" PageSize="10"
+                        AllowSorting="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                        EmptyText="No hay usuarios registrados."
+                        FirstPageTitle="Primera"
+                        LastPageTitle="Última"
+                        NextPageTitle="Siguiente"
+                        PrevPageTitle="Anterior"
+                        PagingSummaryFormat="Mostrando {0} de {1} elementos"
+                        FilterText="Filtrar"
+                        ClearFilterText="Limpiar"
+                        ContainsText="Contiene"
+                        DoesNotContainText="No contiene"
+                        StartsWithText="Inicia con"
+                        EndsWithText="Termina con"
+                        EqualsText="Igual a"
+                        NotEqualsText="No es igual a"
+                        GreaterThanText="Mayor que"
+                        GreaterThanOrEqualsText="Mayor o igual que"
+                        LessThanText="Menor que"
+                        LessThanOrEqualsText="Menor o igual que"
+                        IsNullText="Es nulo"
+                        ApplyFilterText="Aceptar"
+                        IsNotNullText="No es nulo"
+                        AndOperatorText="Y"
+                        OrOperatorText="O"
+                        IsEmptyText="Está vacío"
+                        IsNotEmptyText="No está vacío">
+            <Columns>
+                <RadzenDataGridColumn TItem="ApplicationUser" Property="FullName" Title="Nombre Completo" />
+                <RadzenDataGridColumn TItem="ApplicationUser" Property="Email" Title="Email" />
+                <RadzenDataGridColumn TItem="ApplicationUser" Property="UserName" Title="Usuario" />
+                <RadzenDataGridColumn TItem="ApplicationUser" Title="Rol">
+                    <Template Context="user">
+                        @(rolesPorUsuario.ContainsKey(user.Id) ? string.Join(", ", rolesPorUsuario[user.Id]) : "-")
+                    </Template>
+                </RadzenDataGridColumn>
+
+                <RadzenDataGridColumn TItem="ApplicationUser" Title="Acciones" Filterable="false" Sortable="false" TextAlign="TextAlign.Center">
+                    <Template Context="user">
+                        @if (PuedeVerAcciones(user))
+                        {
+                            @* EDITAR *@
+                            @if (PuedeEditar(user))
+                            {
+                                <RadzenButton Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Warning"
+                                              Click="@(() => EditarUsuario(user.Id))" Style="margin-right:5px" />
+                            }
+                            @* ELIMINAR *@
+                            @if (PuedeEliminar(user))
+                            {
+                                <RadzenButton Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger"
+                                              Click="@(() => EliminarUsuario(user.Id))" Style="margin-right:5px" />
+                            }
+                            @* ROLES *@
+                            @if (PuedeGestionarRoles(user))
+                            {
+                                <RadzenButton Icon="settings" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Info"
+                                              Click="@(() => AsignarRoles(user.Id))" />
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
+</CascadingAuthenticationState>
+
+@code {
+    private const string USER_PRINCIPAL = "mdiaz";
+    private const string ROL_ADMIN_SECUNDARIO = "Administrador Secundario";
+    private const string ROL_USUARIO_SISTEMA = "Usuario Sistema";
+
+    private List<ApplicationUser>? usuarios = new();
+    private Dictionary<string, IList<string>> rolesPorUsuario = new();
+
+    private RadzenDataGrid<ApplicationUser>? grid;
+
+    // Estado actual
+    private string? currentUserId;
+    private string? currentUserName;
+    private bool EsPrincipalLogueado => string.Equals(currentUserName, USER_PRINCIPAL, StringComparison.OrdinalIgnoreCase);
+    private bool EsAdminSecundarioLogueado { get; set; }
+    private bool EsUsuarioSistema { get; set; }
+
+    // Bandera para evitar doble carga
+    private bool _cargado;
+    private bool _loading = true;
+
+    private double _progress = 0;
+    private CancellationTokenSource? _progressCts;
+
+    private async Task SimularProgresoAsync(CancellationToken ct)
+    {
+        var rnd = new Random();
+        // Avanza “de mentiras” hasta 90% mientras _loading sea true
+        while (!ct.IsCancellationRequested && _loading && _progress < 90)
+        {
+            _progress += rnd.Next(2, 7);      // 2% a 6% por tick
+            if (_progress > 90) _progress = 90;
+            await InvokeAsync(StateHasChanged);
+            try { await Task.Delay(120, ct); } catch { /* cancel */ }
+        }
+    }
+
+    [CascadingParameter] private Task<Microsoft.AspNetCore.Components.Authorization.AuthenticationState> AuthenticationStateTask { get; set; }
+
+    // Cargar solo una vez después del primer render
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_cargado)
+        {
+            _cargado = true;
+            _loading = true;
+
+            _progressCts?.Cancel();
+            _progressCts = new CancellationTokenSource();
+
+            // Arranca la simulación de progreso
+            _ = SimularProgresoAsync(_progressCts.Token);
+
+            // usuario logueado y sus roles
+            var auth = await AuthenticationStateTask;
+            var cp = auth.User;
+            currentUserId = cp.FindFirstValue(ClaimTypes.NameIdentifier);
+            currentUserName = cp.Identity?.Name;
+
+            if (!string.IsNullOrWhiteSpace(currentUserId))
+            {
+                var rolesLog = await UsersService.ObtenerRolesDeUsuarioAsync(currentUserId);
+                EsAdminSecundarioLogueado = rolesLog?.Contains(ROL_ADMIN_SECUNDARIO) == true;
+                EsUsuarioSistema = rolesLog?.Contains(ROL_USUARIO_SISTEMA) == true;
+            }
+
+            await CargarUsuarios();
+
+            // Termina: sube a 100%, espera un instante y cierra
+            _progress = 100;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(300); // pequeño “finish” visible
+
+
+            _loading = false;
+            _progressCts.Cancel();
+            StateHasChanged(); // único refresco manual
+        }
+    }
+
+    private async Task CargarUsuarios()
+    {
+        usuarios = await UsersService.ObtenerUsuariosAsync();
+        rolesPorUsuario.Clear();
+
+        foreach (var user in usuarios)
+        {
+            rolesPorUsuario[user.Id] = await UsersService.ObtenerRolesDeUsuarioAsync(user.Id);
+        }
+        // Importante: SIN grid.Reload(); para evitar render extra
+    }
+
+    // Navegación
+    private void CrearUsuario() => Navigation.NavigateTo("/users/new", forceLoad: true);
+    private void EditarUsuario(string id) => Navigation.NavigateTo($"/users/edit/{id}", forceLoad: true);
+    private void AsignarRoles(string id) => Navigation.NavigateTo($"/users/roles/{id}", forceLoad: true);
+
+    // Eliminar sin recargar el grid
+    private async Task EliminarUsuario(string userId)
+    {
+        var result = await JS.InvokeAsync<object>("Swal.fire", new
+        {
+            title = "¿Eliminar usuario?",
+            text = "Se eliminará este usuario de forma permanente.",
+            icon = "warning",
+            showCancelButton = true,
+            confirmButtonText = "Sí, eliminar",
+            cancelButtonText = "Cancelar"
+        });
+
+        if (result?.ToString()?.Contains("\"isConfirmed\":true") == true)
+        {
+            var eliminado = await UsersService.EliminarUsuarioAsync(userId);
+
+            if (eliminado)
+            {
+                // Actualizar el estado local sin recargar todo
+                var u = usuarios?.FirstOrDefault(x => x.Id == userId);
+                if (u is not null)
+                {
+                    usuarios!.Remove(u);
+                    rolesPorUsuario.Remove(userId);
+                }
+
+                await MostrarAlerta("✅ Usuario eliminado correctamente.", "success");
+                await CargarUsuarios(); // 🔹 Vuelve a cargar la lista
+                StateHasChanged(); // un render ligero
+            }
+            else
+            {
+                await MostrarAlerta("❌ No se pudo eliminar el usuario.", "error");
+            }
+        }
+    }
+
+    private async Task MostrarAlerta(string mensaje, string tipo)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new
+        {
+            icon = tipo,
+            title = tipo == "success" ? "Éxito" : "Aviso",
+            html = mensaje,
+            confirmButtonText = "OK"
+        });
+    }
+
+    // ---------- Reglas de visibilidad ----------
+    private bool EsMismoUsuario(ApplicationUser u) => u.Id == currentUserId;
+    private bool EsUsuarioPrincipal(ApplicationUser u) =>
+        string.Equals(u?.UserName, USER_PRINCIPAL, StringComparison.OrdinalIgnoreCase);
+
+    private bool TieneRol(ApplicationUser u, string rol) =>
+        rolesPorUsuario.TryGetValue(u.Id, out var lst) && lst.Contains(rol);
+
+    private bool EsAdminSecundario(ApplicationUser u) => TieneRol(u, ROL_ADMIN_SECUNDARIO);
+
+    private bool PuedeVerAcciones(ApplicationUser fila)
+    {
+        if (EsUsuarioPrincipal(fila)) return false;       // mdiaz nunca muestra acciones en su fila
+        if (EsUsuarioSistema) return false;               // informativo
+        if (EsPrincipalLogueado) return !EsMismoUsuario(fila);
+
+        if (EsAdminSecundarioLogueado)
+        {
+            if (EsMismoUsuario(fila)) return true;          // verá solo Editar
+            return !EsAdminSecundario(fila);                // no ver acciones de otros secundarios
+        }
+
+        return false; // otros roles -> informativo
+    }
+
+    private bool PuedeEditar(ApplicationUser fila)
+    {
+        if (!PuedeVerAcciones(fila)) return false;
+
+        if (EsAdminSecundarioLogueado)
+        {
+            if (EsMismoUsuario(fila)) return true;         // propio: solo Editar
+            return !EsAdminSecundario(fila);
+        }
+
+        return true; // principal sí
+    }
+
+    private bool PuedeEliminar(ApplicationUser fila)
+    {
+        if (!PuedeVerAcciones(fila)) return false;
+
+        if (EsAdminSecundarioLogueado)
+        {
+            if (EsMismoUsuario(fila)) return false;        // no se elimina a sí mismo
+            return !EsAdminSecundario(fila);
+        }
+
+        return true; // principal sí
+    }
+
+    private bool PuedeGestionarRoles(ApplicationUser fila)
+    {
+        if (!PuedeVerAcciones(fila)) return false;
+
+        if (EsAdminSecundarioLogueado)
+        {
+            if (EsMismoUsuario(fila)) return false;       // no gestiona sus propios roles
+            return !EsAdminSecundario(fila);
+        }
+
+        return true; // principal sí
+    }
+}

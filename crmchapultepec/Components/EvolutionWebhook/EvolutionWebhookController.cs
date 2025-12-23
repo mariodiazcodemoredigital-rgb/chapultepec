@@ -2,6 +2,7 @@
 using crmchapultepec.entities.EvolutionWebhook;
 using crmchapultepec.entities.EvolutionWebhook.crmchapultepec.data.Entities.EvolutionWebhook;
 using crmchapultepec.services.Hubs;
+using crmchapultepec.services.Implementation.EvolutionWebhook;
 using crmchapultepec.services.Interfaces.EvolutionWebhook;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +21,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
         private readonly ILogger<EvolutionWebhookController> _log;
         private readonly IMessageQueue _queue;
         private readonly IConfiguration _cfg;
-        private readonly IHubContext<CrmHub> _hubContext;
+        private readonly IHubContext<CrmHub> _hubContext;        
+        private readonly ICrmMessageMediaService _mediaService;
         private readonly string? _hmacSecret;
         private readonly string? _inboundToken;
         private readonly string[] _ipWhitelist;
@@ -29,16 +31,61 @@ namespace crmchapultepec.Components.EvolutionWebhook
         ILogger<EvolutionWebhookController> log,
         IMessageQueue queue,
         IConfiguration cfg,
-        IHubContext<CrmHub> hubContext)
+        IHubContext<CrmHub> hubContext,
+        ICrmMessageMediaService mediaService)
         {
             _log = log;
             _queue = queue;
             _cfg = cfg;
             _hubContext = hubContext;
+            _mediaService = mediaService;
             _hmacSecret = cfg["Evolution:WebhookHmacSecret"];        // opcional
             _inboundToken = cfg["Evolution:WebhookInboundToken"];  // opcional
             _ipWhitelist = (cfg["Evolution:WebhookIpWhitelist"] ?? "")
                             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        [HttpGet("all")]
+        public async Task<IActionResult> GetAll(CancellationToken ct)
+        {
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
+
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+            var medias = await db.CrmMessageMedias
+                .Select(m => new MediaDto
+                {
+                    Id = m.Id,
+                    FileName = m.FileName,
+                    MediaType = m.MediaType
+                    //CreatedAtUtc = m.CreatedAtUtc
+                })
+                .ToListAsync(ct);
+
+            return Ok(medias);
+        }
+
+
+        // Endpoint para descargar/desencriptar un archivo por Id
+        [HttpGet("download/{id}")]
+        public async Task<IActionResult> Download(int id, CancellationToken ct)
+        {
+            var media = await _mediaService.GetByIdAsync(id, ct);
+            if (media == null) return NotFound();
+
+            var bytes = await _mediaService.DecryptMedia(media, ct);
+            if (bytes == null) return BadRequest("No se pudo desencriptar el archivo");
+
+            // Si no tienes MediaMime, usar un genérico o inferir por la extensión
+            var mime = media.MediaType switch
+            {
+                "image" => "image/jpeg",
+                "document" => "application/pdf",
+                "audio" => "audio/mpeg",
+                _ => "application/octet-stream"
+            };
+
+            return File(bytes, mime, media.FileName);
         }
 
         [HttpPost]
@@ -121,39 +168,39 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 return Ok(new { status = "accepted_raw" });
             }
             
-            //Persistir la informacion del snapshot creada anteriormente y guardarla en las tablas de Thread y Messages
+            //Persistir (GUARDA) la informacion del snapshot creada anteriormente y guardarla en las tablas de Thread y Messages
             await PersistSnapshotAsync(snapshot);
 
-            // 🔹 Guardar RAW PAYLOAD (SIEMPRE)
-            //await SaveRawEvolutionPayloadAsync(body, envelope.ThreadId, ct);
 
-
-
-
-            // 5) Parsear payload
-            IncomingMessageDto? dto;
-            var mapped = MapEvolutionToIncoming(body);
-            try
-            {   
-                if (mapped == null)
-                {
-                    // opcional: enqueue raw or return accepted_raw
-                    _log.LogWarning("Could not map evolution payload to DTO; enqueuing raw or saving dead letter.");
-                    // enqueue or handle accordingly
-                    return Ok(new { status = "accepted_raw" });
-                }
-            }
-            catch (Exception ex)
+            // 5) Reutilizar el envelope ya mapeado anteriormente
+            // No necesitamos llamar a MapEvolutionToIncoming()
+            if (envelope == null)
             {
-                _log.LogError(ex, "Failed to deserialize webhook JSON");
-                return BadRequest();
+                _log.LogWarning("No hay un envelope válido para encolar.");
+                return Ok(new { status = "accepted_raw" });
             }
+
+            // Convertimos el envelope a IncomingMessageDto (el objeto que entiende tu cola)
+            // Usamos tu constructor de IncomingMessageDto con los datos ya procesados del envelope
+            var incoming = new IncomingMessageDto(
+                 threadId: envelope.ThreadId,
+                 businessAccountId: envelope.BusinessAccountId,
+                 sender: envelope.CustomerPhone ?? "unknown",
+                 displayName: envelope.CustomerDisplayName ?? "",
+                 text: envelope.Text ?? "",
+                 timestamp: envelope.ExternalTimestamp,
+                 directionIn: envelope.DirectionIn, // Aquí usamos el valor calculado (!fromMe)
+                 ai: null,
+                 action: "initial",
+                 reason: "incoming_from_evolution",
+                 title: (envelope.CustomerDisplayName ?? envelope.CustomerPhone)?.Split(' ').FirstOrDefault() ?? "Nuevo"
+            );
 
             // 6) ACK rápido: contestar antes de processamento pesado
             //    Encolar procesamiento y retornar 200 Accepted (o 200 OK)
             try
             {
-                await _queue.EnqueueAsync(mapped);
+                await _queue.EnqueueAsync(incoming);
             }
             catch (Exception ex)
             {
@@ -395,7 +442,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
         }
 
 
-        //helper
+        //HELPER
+        //Guardado cuando esta incorrecto el payloadraw
         private async Task SaveRawEvolutionPayloadAsync(
         string rawBody,
         string threadId,
@@ -418,6 +466,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
             await db.SaveChangesAsync(ct);
         }
 
+        // Guardado correcto del payloadraws
         private async Task<int> SaveRawPayloadAsync(string rawBody, CancellationToken ct)
         {
             using var doc = JsonDocument.Parse(rawBody);
@@ -450,13 +499,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
             DateTime? messageDateUtc = null;
             var tsElement = data.GetProperty("messageTimestamp");
             var timestamp = ReadUnixTimestamp(tsElement);
-
-
-            //if (data.TryGetProperty("messageTimestamp", out var mts) &&
-            //    mts.TryGetInt64(out var ts))
-            //{
-                messageDateUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
-            //}
+         
+            messageDateUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;         
 
             var threadId = $"{instance}:{remoteJid ?? sender ?? "unknown"}";
 
@@ -492,6 +536,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
             return entity.Id;
         }
 
+
+        // Construye el Dto que se guardara en la tabla
         private EvolutionMessageSnapshotDto? BuildSnapshot(string rawBody)
         {
             try
@@ -655,14 +701,13 @@ namespace crmchapultepec.Components.EvolutionWebhook
                             fileSha256 = docu.TryGetProperty("fileSha256", out var fsh) ? fsh.GetString() : null;
                             fileEncSha256 = docu.TryGetProperty("fileEncSha256", out var feh) ? feh.GetString() : null;
                             directPath = docu.TryGetProperty("directPath", out var dp) ? dp.GetString() : null;
-
-                            // 👇 ESTA ERA LA LÍNEA QUE TRONABA
+                                                       
                             if (docu.TryGetProperty("mediaKeyTimestamp", out var mts))
                                 mediaKeyTimestamp = ReadUnixTimestamp(mts);
 
                             fileName = docu.TryGetProperty("fileName", out var fn) ? fn.GetString() : null;
 
-                            // 👇 fileLength VIENE COMO STRING
+                            //  fileLength VIENE COMO STRING
                             if (docu.TryGetProperty("fileLength", out var fl))
                             {
                                 if (fl.ValueKind == JsonValueKind.String && long.TryParse(fl.GetString(), out var len))
@@ -685,29 +730,39 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
                     case "stickerMessage":
                         {
-                            messageKind = MessageKind.Sticker;
+                            messageKind = MessageKind.Sticker; // Asegúrate de que tu Enum tenga Sticker
                             mediaType = "sticker";
 
                             var stk = message.GetProperty("stickerMessage");
 
-                            mediaUrl = stk.GetProperty("url").GetString();
-                            mediaMime = stk.GetProperty("mimetype").GetString();
+                            // Propiedades básicas (Strings directos)
+                            mediaUrl = stk.TryGetProperty("url", out var url) ? url.GetString() : null;
+                            mediaMime = stk.TryGetProperty("mimetype", out var mime) ? mime.GetString() : "image/webp";
+                            mediaKey = stk.TryGetProperty("mediaKey", out var mk) ? mk.GetString() : null;
+                            fileSha256 = stk.TryGetProperty("fileSha256", out var fsh) ? fsh.GetString() : null;
+                            fileEncSha256 = stk.TryGetProperty("fileEncSha256", out var feh) ? feh.GetString() : null;
+                            directPath = stk.TryGetProperty("directPath", out var dp) ? dp.GetString() : null;
 
-                            mediaKey = stk.GetProperty("mediaKey").GetString();
-                            fileSha256 = stk.GetProperty("fileSha256").GetString();
-                            fileEncSha256 = stk.GetProperty("fileEncSha256").GetString();
-                            directPath = stk.GetProperty("directPath").GetString();
-                            mediaKeyTimestamp = stk.TryGetProperty("mediaKeyTimestamp", out var mts)
-                                ? mts.GetInt64()
-                                : null;
+                            // mediaKeyTimestamp (Manejo de String o Number)
+                            if (stk.TryGetProperty("mediaKeyTimestamp", out var mts))
+                            {
+                                if (mts.ValueKind == JsonValueKind.String && long.TryParse(mts.GetString(), out var ts))
+                                    mediaKeyTimestamp = ts;
+                                else if (mts.ValueKind == JsonValueKind.Number)
+                                    mediaKeyTimestamp = mts.GetInt64();
+                            }
 
-                            fileLength = stk.TryGetProperty("fileLength", out var fl)
-                                ? fl.GetInt64()
-                                : null;
+                            // fileLength (Manejo de String o Number)
+                            if (stk.TryGetProperty("fileLength", out var fl))
+                            {
+                                if (fl.ValueKind == JsonValueKind.String && long.TryParse(fl.GetString(), out var len))
+                                    fileLength = len;
+                                else if (fl.ValueKind == JsonValueKind.Number)
+                                    fileLength = fl.GetInt64();
+                            }
 
-                            // Stickers no tienen caption
+                            // stickers no suelen tener texto/caption
                             mediaCaption = null;
-
                             textPreview = "[Sticker]";
                             break;
                         }
@@ -764,7 +819,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
             }
         }
 
-        //Ya con estos guarda la informacion en las tablas de thread y messages
+        //Ya con estos guarda la informacion en las tablas de thread y messages (OBTIENE Y/O CREA EL THREAD)
         private async Task<CrmThread> GetOrCreateThreadAsync(EvolutionMessageSnapshotDto snap, CancellationToken ct = default)
         {
             using var scope = HttpContext.RequestServices.CreateScope();
@@ -811,7 +866,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
             return thread;
         }
 
-
+        // Valida que el mensaje no exista en la tabla, Regresa el mensaje si existe
         private async Task<bool> MessageExistsAsync(EvolutionMessageSnapshotDto snap, int threadId, CancellationToken ct = default)
         {
             using var scope = HttpContext.RequestServices.CreateScope();
@@ -833,7 +888,63 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 m.RawHash == hash, ct);
         }
 
+        //Inserta Valores  Media en la tabla (CrmMessagesMedias)
+        private async Task InsertMediaAsync(CrmMessage msg, EvolutionMessageSnapshotDto s, CancellationToken ct = default)
+        {
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
 
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+            if (!msg.HasMedia) return;
+
+            var media = new CrmMessageMedia
+            {
+                MessageId = msg.Id,
+                MediaType = s.MessageType,
+                MimeType = s.MediaMime,
+                MediaUrl = s.MediaUrl,
+                MediaKey = s.MediaKey,
+                FileSha256 = s.FileSha256,
+                FileEncSha256 = s.FileEncSha256,
+                DirectPath = s.DirectPath,
+                MediaKeyTimestamp = s.MediaKeyTimestamp,
+                FileName = s.FileName,
+                FileLength = s.FileLength,
+                PageCount = s.PageCount,
+                ThumbnailBase64 = s.ThumbnailBase64,
+                CreatedUtc = DateTime.UtcNow
+            };
+
+            db.CrmMessageMedias.Add(media);
+            await db.SaveChangesAsync();
+        }
+
+        //Notifica SignalR "NewMessage"
+        private async Task NotifySignalRAsync(CrmThread thread, CrmMessage msg)
+        {
+            if (string.IsNullOrEmpty(thread.BusinessAccountId))
+                return;
+
+            await _hubContext.Clients
+                .Group(thread.BusinessAccountId)
+                .SendAsync("NewMessage", new
+                {
+
+                    ThreadId = thread.ThreadId,
+                    ThreadDbId = thread.Id,
+                    MessageId = msg.Id,
+                    Sender = msg.Sender,
+                    DisplayName = msg.DisplayName,
+                    Text = msg.Text,
+                    MessageKind = msg.MessageKind,
+                    MediaUrl = msg.MediaUrl,
+                    CreatedUtc = msg.TimestampUtc,
+                    DirectionIn = msg.DirectionIn
+                });
+        }
+
+        //Guarda en la tabla  Mensajes (CrmMessages), manda a llamar si tiene Medias (inserta medias) /Notifica SignalR
         private async Task PersistSnapshotAsync(EvolutionMessageSnapshotDto snap, CancellationToken ct = default)
         {
             using var scope = HttpContext.RequestServices.CreateScope();
@@ -893,103 +1004,6 @@ namespace crmchapultepec.Components.EvolutionWebhook
             // Notifica SignalR
             await NotifySignalRAsync(thread, message);
         }
-
-
-
-
-        private async Task<CrmMessage> InsertMessageAsync(CrmThread thread, EvolutionMessageSnapshotDto s, CancellationToken ct = default)
-        {
-            using var scope = HttpContext.RequestServices.CreateScope();
-            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
-
-            await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-            var msg = new CrmMessage
-            {
-                ThreadRefId = thread.Id,
-                Sender = s.Sender,
-                DisplayName = s.CustomerDisplayName,
-                Text = s.Text,
-                TimestampUtc = s.CreatedAtUtc,
-                ExternalTimestamp = s.ExternalTimestamp,
-                DirectionIn = s.DirectionIn,
-
-                MediaUrl = s.MediaUrl,
-                MediaMime = s.MediaMime,
-                MediaCaption = s.MediaCaption,
-                MediaType = s.MessageType,
-
-                MessageKind = (int)s.MessageKind,
-                HasMedia = s.MessageKind != MessageKind.Text,
-
-                ExternalId = s.ExternalMessageId,
-                RawPayload = s.RawPayloadJson,
-                RawHash = ComputeSha256(s.RawPayloadJson),
-                CreatedUtc = DateTime.UtcNow
-            };
-
-            db.CrmMessages.Add(msg);
-            await db.SaveChangesAsync();
-
-            return msg;
-        }
-
-        private async Task InsertMediaAsync(CrmMessage msg,EvolutionMessageSnapshotDto s, CancellationToken ct = default)
-        {
-            using var scope = HttpContext.RequestServices.CreateScope();
-            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CrmInboxDbContext>>();
-
-            await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-            if (!msg.HasMedia) return;
-
-            var media = new CrmMessageMedia
-            {
-                MessageId = msg.Id,
-                MediaType = s.MessageType,
-                MimeType = s.MediaMime,
-                MediaUrl = s.MediaUrl,
-                MediaKey = s.MediaKey,
-                FileSha256 = s.FileSha256,
-                FileEncSha256 = s.FileEncSha256,
-                DirectPath = s.DirectPath,
-                MediaKeyTimestamp = s.MediaKeyTimestamp,
-                FileName = s.FileName,
-                FileLength = s.FileLength,
-                PageCount = s.PageCount,
-                ThumbnailBase64 = s.ThumbnailBase64,
-                CreatedUtc = DateTime.UtcNow
-            };
-
-            db.CrmMessageMedias.Add(media);
-            await db.SaveChangesAsync();
-        }
-
-
-
-        private async Task NotifySignalRAsync(CrmThread thread, CrmMessage msg)
-        {
-            if (string.IsNullOrEmpty(thread.BusinessAccountId))
-                return;
-
-            await _hubContext.Clients
-                .Group(thread.BusinessAccountId)
-                .SendAsync("NewMessage", new
-                {
-                     
-                    ThreadId = thread.ThreadId,
-                    ThreadDbId = thread.Id,
-                    MessageId = msg.Id,
-                    Sender = msg.Sender,
-                    DisplayName = msg.DisplayName,
-                    Text = msg.Text,
-                    MessageKind = msg.MessageKind,
-                    MediaUrl = msg.MediaUrl,
-                    CreatedUtc = msg.TimestampUtc,
-                    DirectionIn = msg.DirectionIn
-                });
-        }
-
 
 
 

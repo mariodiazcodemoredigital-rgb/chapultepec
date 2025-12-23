@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace crmchapultepec.entities.EvolutionWebhook
@@ -14,6 +15,7 @@ namespace crmchapultepec.entities.EvolutionWebhook
         // Relación
         // =========================
         public int ThreadRefId { get; set; }
+        [JsonIgnore]
         public CrmThread Thread { get; set; } = null!;
 
         // =========================

@@ -1,0 +1,59 @@
+﻿@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<a @attributes="AdditionalAttributes"
+   class="@CssClass"
+   href="@Href"
+   @onclick="HandleClick">
+    @ChildContent
+</a>
+
+@code {
+    [Parameter] public string Href { get; set; }
+    [Parameter] public NavLinkMatch Match { get; set; } = NavLinkMatch.Prefix;
+    [Parameter] public string Class { get; set; }
+    [Parameter] public bool ForceLoad { get; set; } = false;
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object> AdditionalAttributes { get; set; }
+    [Parameter] public RenderFragment ChildContent { get; set; }
+
+    private string CssClass => BuildCssClass();
+
+    private string BuildCssClass()
+    {
+        var baseClass = Class ?? "";
+        var currentPath = Navigation.ToBaseRelativePath(Navigation.Uri).Trim('/');
+        var targetPath = Href?.TrimStart('/');
+
+        // Si targetPath es vacío, significa que es "/"
+        bool isActive = false;
+
+        if (Match == NavLinkMatch.All)
+        {
+            isActive = string.Equals(currentPath, targetPath, StringComparison.OrdinalIgnoreCase);
+        }
+        else // Prefix match (default)
+        {
+            if (string.IsNullOrEmpty(targetPath))
+            {
+                // Evitar que "/" se mantenga activo en cualquier ruta
+                isActive = string.IsNullOrEmpty(currentPath); // solo cuando estés en "/"
+            }
+            else
+            {
+                isActive = currentPath.StartsWith(targetPath, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        return isActive ? $"{baseClass} active" : baseClass;
+    }
+
+    private async Task HandleClick(MouseEventArgs e)
+    {
+        // Cierra sidebar (móviles) (Helper)
+        await JS.InvokeVoidAsync("sidebarHelper.closeSidebarOnMobile");
+
+        // Navegación con o sin recarga forzada
+        Navigation.NavigateTo(Href, ForceLoad);
+    }
+}

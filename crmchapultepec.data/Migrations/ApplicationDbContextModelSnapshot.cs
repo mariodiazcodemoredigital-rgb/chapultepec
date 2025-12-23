@@ -245,6 +245,90 @@ namespace crmchapultepec.data.Migrations
                     b.ToTable("Usuarios");
                 });
 
+            modelBuilder.Entity("crmchapultepec.entities.Entities.CRM.CRMEquipo", b =>
+                {
+                    b.Property<int>("EquipoId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EquipoId"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("FechaActualizacion")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("EquipoId");
+
+                    b.ToTable("CRMEquipo");
+                });
+
+            modelBuilder.Entity("crmchapultepec.entities.Entities.CRM.CRMEquipoUsuario", b =>
+                {
+                    b.Property<int>("EquipoUsuarioId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EquipoUsuarioId"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("EquipoId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("int");
+
+                    b.HasKey("EquipoUsuarioId");
+
+                    b.HasIndex("EquipoId");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("CRMEquipoUsuario");
+                });
+
+            modelBuilder.Entity("crmchapultepec.entities.Entities.CRM.CRMUsuario", b =>
+                {
+                    b.Property<int>("UsuarioId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("UsuarioId"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("FechaActualizacion")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Telefono")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("UsuarioId");
+
+                    b.ToTable("CRMUsuario");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -294,6 +378,35 @@ namespace crmchapultepec.data.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("crmchapultepec.entities.Entities.CRM.CRMEquipoUsuario", b =>
+                {
+                    b.HasOne("crmchapultepec.entities.Entities.CRM.CRMEquipo", "Equipo")
+                        .WithMany("Miembros")
+                        .HasForeignKey("EquipoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("crmchapultepec.entities.Entities.CRM.CRMUsuario", "Usuario")
+                        .WithMany("Equipos")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Equipo");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("crmchapultepec.entities.Entities.CRM.CRMEquipo", b =>
+                {
+                    b.Navigation("Miembros");
+                });
+
+            modelBuilder.Entity("crmchapultepec.entities.Entities.CRM.CRMUsuario", b =>
+                {
+                    b.Navigation("Equipos");
                 });
 #pragma warning restore 612, 618
         }

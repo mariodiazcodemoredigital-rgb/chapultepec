@@ -1,0 +1,799 @@
+﻿@page "/gestionadmin"
+@using Microsoft.EntityFrameworkCore
+@using crmchapultepec.data.Data
+@using crmchapultepec.entities.Entities.CRM
+@using crmchapultepec.services.Implementation.CRM
+@using crmchapultepec.services.Interfaces.CRM
+@using crmchapultepec.services.Interfaces.EvolutionWebhook
+
+@* ES PARA LA NUEVA PESTAÑA DE APAGADO / ENCENDIDO DE WEBHOOK *@
+@inject IWebhookControlService WebhookControl
+@inject IDbContextFactory<CrmInboxDbContext> Factory
+
+@inject CRMxEquiposService Equipos
+@inject CRMxUsuariosService Usuarios
+@inject CRMxEquiposUsuariosService Rel
+@inject IJSRuntime JS
+
+@rendermode InteractiveServer
+
+<div class="crmadmin">
+    <!-- Header -->
+    <div class="crmadmin__header">
+        <div>
+            <h1>Gestión de Equipos</h1>
+            <p class="muted">Gestiona equipos, usuarios y asignaciones para CRM Ventas.</p>
+        </div>
+        <div class="crmadmin__header-cta">
+            @if (tab == 0)
+            {
+                <button class="btn btn-brand btn-brand-primary" @onclick="ShowNewEquipo">Nuevo equipo</button>
+            }
+            else if (tab == 1)
+            {
+                <button class="btn btn-brand btn-brand-primary" @onclick="ShowNewUsuario">Nuevo usuario</button>
+            }
+            @* (tab == 2) -> Quitar botón "Asignar usuario" *@
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav crmadmin__tabs">
+        <li class="nav-item">
+            <a class="@TabClass(0)" @onclick="@(() => SetTabAsync(0))"><i class="fas fa-users"></i> Equipos</a>
+        </li>
+        <li class="nav-item">
+            <a class="@TabClass(1)" @onclick="@(() => SetTabAsync(1))"><i class="fas fa-user-circle"></i> Usuarios</a>
+        </li>
+        <li class="nav-item">
+            <a class="@TabClass(2)" @onclick="@(() => SetTabAsync(2))"><i class="fas fa-link"></i> Asignaciones</a>
+        </li>
+        <li class="nav-item">
+            <a class="@TabClass(3)" @onclick="@(() => SetTabAsync(3))"><i class="fas fa-toggle-on"></i> Config Webhook</a>
+        </li>
+    </ul>
+
+    <!-- BODY -->
+    <div class="crmadmin__body">
+
+        <!-- EQUIPOS -->
+        @if (tab == 0)
+        {
+            <div class="card">
+                <div class="card__toolbar">
+                    <div class="input-icon">
+                        <i class="fas fa-search"></i>
+                        <input placeholder="Buscar equipo..." @bind="searchEquipos" @bind:event="oninput" />
+                    </div>
+                    <div class="spacer"></div>
+                    <button class="btn btn-light" @onclick="LoadEquipos"><i class="fas fa-rotate"></i></button>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="table modern">
+                        <thead>
+                            <tr>
+                                <th style="width:80px">#</th>
+                                <th>Nombre</th>
+                                <th class="center" style="width:120px">Activo</th>
+                                <th style="width:200px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (equipos.Count == 0)
+                            {
+                                <tr><td colspan="4"><div class="empty">Sin resultados…</div></td></tr>
+                            }
+                            @foreach (var e in equipos)
+                            {
+                                <tr class="row-hover" @key="e.EquipoId">
+                                    <td><span class="mono">EQ-@e.EquipoId</span></td>
+                                    <td>
+                                        @if (editEquipo?.EquipoId == e.EquipoId)
+                                        {
+                                            <input class="inp" @bind="editEquipo!.Nombre" />
+                                        }
+                                        else
+                                        {
+
+                                            <strong>@e.Nombre</strong>
+                                        }
+                                    </td>
+                                    <td class="center">
+                                        <div class="form-switch">
+                                            @* <input type="checkbox" checked="@e.Activo"
+                                                   @key="e.Activo" 
+                                                   @onchange="async a => await OnEquipoActivoChanged(e.EquipoId, ((ChangeEventArgs)a).Value as bool? ?? false)" /> *@
+
+                                            <input type="checkbox" checked="@e.Activo"
+                                                   disabled="@(editEquipo?.EquipoId == e.EquipoId)"
+                                                   @key="e.Activo"
+                                                   @onchange="async a => await OnEquipoActivoChanged(e.EquipoId, ((ChangeEventArgs)a).Value as bool? ?? false)" />
+
+                                        </div>
+                                    </td>
+                                    <td class="right">
+                                        @if (editEquipo?.EquipoId == e.EquipoId)
+                                        {
+                                            <button class="btn btn-brand btn-brand-success" @onclick="SaveEquipo"><i class="fas fa-check"></i> Guardar</button>
+                                            <button class="btn btn-brand btn-brand-danger" @onclick="CancelEquipo"><i class="fas fa-xmark"></i> Cancelar</button>
+                                        }
+                                        else
+                                        {
+                                            <div class="action-buttons">
+                                                <RadzenButton Icon="edit"
+                                                              Size="ButtonSize.Small"
+                                                              ButtonStyle="ButtonStyle.Warning"
+                                                              Click="@(() => EditEquipo(e))"
+                                                              Title="Editar" />
+
+                                                <RadzenButton Icon="delete"
+                                                              Size="ButtonSize.Small"
+                                                              ButtonStyle="ButtonStyle.Danger"
+                                                              Click="@(() => DeleteEquipo(e.EquipoId))"
+                                                              Title="Eliminar" />
+                                            </div>
+
+
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (showNewEquipo)
+                {
+                    <div class="card__footer">
+                        <div class="grid-3">
+                            <input class="inp" placeholder="Nombre del equipo" @bind="nuevoEquipo.Nombre" />
+                            <label class="chk"><input type="checkbox" @bind="nuevoEquipo.Activo" /> Activo</label>
+                            <div class="right">
+                                <button class="btn btn-primary" @onclick="CreateEquipo"><i class="fas fa-plus"></i> Agregar</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- USUARIOS -->
+        @if (tab == 1)
+        {
+            <div class="card">
+                <div class="card__toolbar">
+                    <div class="input-icon">
+                        <i class="fas fa-search"></i>
+                        <input placeholder="Buscar usuario..." @bind="searchUsuarios" @bind:event="oninput" />
+                    </div>
+                    <div class="spacer"></div>
+                    <button class="btn btn-light" @onclick="LoadUsuarios"><i class="fas fa-rotate"></i></button>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="table modern">
+                        <thead>
+                            <tr>
+                                <th style="width:80px">#</th>
+                                <th>Usuario</th>
+                                <th>Teléfono</th>
+                                <th class="center" style="width:120px">Activo</th>
+                                <th style="width:220px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (usuarios.Count == 0)
+                            {
+                                <tr><td colspan="5"><div class="empty">Sin resultados…</div></td></tr>
+                            }
+                            @foreach (var u in usuarios)
+                            {
+                                <tr class="row-hover">
+                                    <td><span class="mono">US-@u.UsuarioId</span></td>
+                                    <td>
+                                        @if (editUsuario?.UsuarioId == u.UsuarioId)
+                                        {
+                                            <input class="inp" @bind="editUsuario!.UserName" />
+                                        }
+                                        else
+                                        {
+
+                                            <strong>@u.UserName</strong>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (editUsuario?.UsuarioId == u.UsuarioId)
+                                        {
+                                            <input class="inp" @bind="editUsuario!.Telefono" />
+                                        }
+                                        else
+                                        {
+
+                                            @u.Telefono
+                                        }
+                                    </td>
+                                    <td class="center">
+                                        <div class="form-switch">
+
+                                            <input type="checkbox" checked="@u.Activo"
+                                                   disabled="@(editUsuario?.UsuarioId == u.UsuarioId)"
+                                                   @key="u.Activo"
+                                                   @onchange="async a => await OnUsuarioActivoChanged(u.UsuarioId, ((ChangeEventArgs)a).Value as bool? ?? false)" />
+
+                                            @*  <input type="checkbox" checked="@u.Activo"
+                                                   @onchange="async a => await OnUsuarioActivoChanged(u.UsuarioId, ((ChangeEventArgs)a).Value as bool? ?? false)" /> *@
+
+                                        </div>
+                                    </td>
+                                    <td class="right">
+                                        @if (editUsuario?.UsuarioId == u.UsuarioId)
+                                        {
+                                            <button class="btn btn-brand btn-brand-success" @onclick="SaveUsuario"><i class="fas fa-check"></i> Guardar</button>
+                                            <button class="btn btn-brand btn-brand-danger" @onclick="CancelUsuario"><i class="fas fa-xmark"></i> Cancelar</button>
+                                        }
+                                        else
+                                        {
+                                            <div class="action-buttons">
+                                                <RadzenButton Icon="edit"
+                                                              Size="ButtonSize.Small"
+                                                              ButtonStyle="ButtonStyle.Warning"
+                                                              Click="@(() => EditUsuario(u))"
+                                                              Title="Editar" />
+
+                                                <RadzenButton Icon="delete"
+                                                              Size="ButtonSize.Small"
+                                                              ButtonStyle="ButtonStyle.Danger"
+                                                              Click="@(() => DeleteUsuario(u.UsuarioId))"
+                                                              Title="Eliminar" />
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (showNewUsuario)
+                {
+                    <div class="card__footer">
+                        <div class="grid-4">
+                            <input class="inp" placeholder="usuario" @bind="nuevoUsuario.UserName" />
+                            <input class="inp" placeholder="+52..." @bind="nuevoUsuario.Telefono" />
+                            <label class="chk"><input type="checkbox" @bind="nuevoUsuario.Activo" /> Activo</label>
+                            <div class="right">
+                                <button class="btn btn-primary" @onclick="CreateUsuario"><i class="fas fa-user-plus"></i> Agregar</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- ASIGNACIONES -->
+        @if (tab == 2)
+        {
+            <div class="card">
+                <div class="card__toolbar">
+                    <div class="grid-3 w-100">
+                        <!-- .NET 8 -->
+                        <select class="inp" @bind="equipoSelId" @bind:after="OnEquipoChanged">
+                            <option value="0">Todos los equipos…</option>
+                            @foreach (var e in equipos)
+                            {
+                                <option value="@e.EquipoId">@e.Nombre</option>
+                            }
+                        </select>
+
+                        <!-- .NET 6/7 (usa esto en lugar de lo anterior)
+                        <select class="inp" value="@equipoSelId" @onchange="HandleEquipoChanged">
+                          <option value="0">Todos los equipos…</option>
+                          @foreach (var e in equipos)
+                          {
+                                  <option value="@e.EquipoId">@e.Nombre</option>
+                          }
+                        </select> -->
+                        <!-- Usuarios disponibles SOLO cuando hay equipo elegido -->
+                        <select class="inp"
+                                @bind="usuarioSelId"
+                                disabled="@(equipoSelId <= 0 || usuariosDisponibles.Count == 0)">
+                            <option value="0">Usuario…</option>
+                            @if (equipoSelId > 0)
+                            {
+                                @foreach (var u in usuariosDisponibles)
+                                {
+                                    <option value="@u.UsuarioId">@u.UserName (@u.Telefono)</option>
+                                }
+                            }
+                        </select>
+
+                        <div class="right">
+                            <button class="btn btn-brand btn-brand-primary"
+                                    @onclick="AddRel"
+                                    disabled="@(!(equipoSelId > 0 && usuarioSelId > 0))">
+                                <i class="fas fa-link"></i> Asignar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                @* Vista 1: Agrupado (sin equipo seleccionado) *@
+                @if (equipoSelId == 0)
+                {
+                    @if (grupos?.Count > 0)
+                    {
+                        <div class="groups-wrap">
+
+                            @foreach (var g in grupos)
+                            {
+                                <div class="card card--group">
+
+                                    <div class="card__header hstack">
+                                        <div>
+                                            <strong>@g.Equipo.Nombre</strong>
+                                            <span class="badge">@g.Miembros.Count miembro(s)</span>
+                                        </div>
+                                        <div class="spacer"></div>
+                                        <button class="btn btn-ghost btn-sm" @onclick="() => VerSoloEquipo(g.Equipo.EquipoId)">
+                                            Ver solo este equipo
+                                        </button>
+                                    </div>
+
+                                    <div class="table-wrap">
+                                        <table class="table modern">
+                                            <thead>
+                                                <tr><th>Usuario</th><th style="width:140px">Estado</th><th style="width:120px"></th></tr>
+                                            </thead>
+                                            <tbody>
+                                                @if (g.Miembros.Count == 0)
+                                                {
+                                                    <tr><td colspan="3"><div class="empty">Sin miembros.</div></td></tr>
+                                                }
+                                                else
+                                                {
+                                                    @foreach (var r in g.Miembros)
+                                                    {
+                                                        <tr class="row-hover">
+                                                            <td><strong>@r.Usuario!.UserName</strong> <span class="muted">(@r.Usuario.Telefono)</span></td>
+                                                            <td>
+                                                                @if (r.Activo)
+                                                                {
+                                                                    <span class="badge success">Activo</span>
+                                                                }
+                                                                else
+                                                                {
+
+                                                                    <span class="badge">Inactivo</span>
+                                                                }
+                                                            </td>
+                                                            <td class="right">
+                                                                <button class="btn btn-danger btn-sm" @onclick="() => RemoveRel(r.EquipoUsuarioId)">
+                                                                    <i class="fas fa-unlink"></i> Quitar
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty">No hay equipos para mostrar.</div>
+                    }
+                }
+                else
+                {
+                    @* Vista 2: Solo el equipo seleccionado *@
+                    <div class="table-wrap">
+                        <table class="table modern">
+                            <thead>
+                                <tr><th>Usuario</th><th style="width:140px">Estado</th><th style="width:120px"></th></tr>
+                            </thead>
+                            <tbody>
+                                @if (miembros.Count == 0)
+                                {
+                                    <tr><td colspan="3"><div class="empty">Este equipo aún no tiene miembros.</div></td></tr>
+                                }
+                                else
+                                {
+                                    @foreach (var r in miembros)
+                                    {
+                                        <tr class="row-hover">
+                                            <td><strong>@r.Usuario!.UserName</strong> <span class="muted">(@r.Usuario.Telefono)</span></td>
+                                            <td>
+                                                @if (r.Activo)
+                                                {
+                                                    <span class="badge success">Activo</span>
+                                                }
+                                                else
+                                                {
+
+                                                    <span class="badge">Inactivo</span>
+                                                }
+                                            </td>
+                                            <td class="right">
+                                                <button class="btn btn-danger btn-sm" @onclick="() => RemoveRel(r.EquipoUsuarioId)">
+                                                    <i class="fas fa-unlink"></i> Quitar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- CONFIG WEBHOOK -->
+        @if (tab == 3)
+        {
+            <div class="card">
+                <div class="card__header">
+                    <strong>Configuración del Sistema</strong>
+                </div>
+                <div class="card__body" style="padding: 20px;">
+                    <div class="setup-item hstack">
+                        <div>
+                            <h4 style="margin:0">Webhook Evolution</h4>
+                            <p class="muted" style="margin:0">Habilita o deshabilita la recepción de mensajes en tiempo real.</p>
+                        </div>
+                        <div class="spacer"></div>
+                        <div class="form-switch form-switch-lg">
+                            <input type="checkbox" @bind="webhookEnabled" id="webhookToggle" />
+                            <label for="webhookToggle" class="badge @(webhookEnabled ? "success" : "")" style="cursor:pointer; margin-left:10px">
+                                @(webhookEnabled ? "RECIBIENDO" : "DETENIDO")
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="card__footer right">
+                    <button class="btn btn-brand btn-brand-primary" @onclick="SaveWebhookSettings">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+                </div>
+            </div>
+        }
+
+    </div>
+</div>
+
+@code {
+    // --- UI state ---
+    int tab = 0;
+    string? searchEquipos, searchUsuarios;
+    bool showNewEquipo, showNewUsuario;
+
+    bool webhookEnabled; // Nueva variable para el switch
+
+    // --- Data ---
+    List<CRMEquipo> equipos = new();
+    CRMEquipo nuevoEquipo = new() { Activo = true };
+    CRMEquipo? editEquipo;
+
+    List<CRMUsuario> allUsers = new();            // todos (para combo asignación)
+    List<CRMUsuario> usuariosDisponibles = new(); // activos y no asignados al equipo seleccionado
+    List<CRMUsuario> usuarios = new();            // grilla del tab Usuarios
+    CRMUsuario nuevoUsuario = new() { Activo = true };
+    CRMUsuario? editUsuario;
+
+    List<CRMEquipoUsuario> miembros = new();
+    int equipoSelId, usuarioSelId;
+
+    // Agrupado (Todos los equipos)
+    class EquipoGroup
+    {
+        public CRMEquipo Equipo { get; set; } = new();
+        public List<CRMEquipoUsuario> Miembros { get; set; } = new();
+    }
+    List<EquipoGroup> grupos = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEquipos();
+        await LoadUsuarios();
+        allUsers = await Usuarios.GetAllAsync(); // para combo de asignación
+
+        // Cargar estado inicial del webhook
+        webhookEnabled = await WebhookControl.IsEvolutionEnabledAsync();
+    }
+
+
+    async Task SetTabAsync(int i)
+    {
+        tab = i;
+
+        if (i == 0)
+        {
+            await LoadEquipos();
+        }
+        else if (i == 1)
+        {
+            await LoadUsuarios();
+        }
+        else if (i == 2)
+        {
+            equipoSelId = 0;
+            await LoadGrupos();
+        }
+        else if (i == 3) 
+            webhookEnabled = await WebhookControl.IsEvolutionEnabledAsync(); // Recargar al entrar
+    }
+    string TabClass(int i) => $"nav-link {(tab == i ? "active" : "")}";
+
+    // Equipos
+    private async Task OnEquipoActivoChanged(int equipoId, bool activo)
+    {
+        try
+        {
+            await Equipos.ToggleActivoAsync(equipoId, activo);
+
+            // Refresca la grilla de equipos para que el estado en memoria
+            // coincida con la BD y el UI se actualice correctamente
+            await LoadEquipos();
+
+            // Si estás en Asignaciones (tab 2) y tu UI depende de equipos activos,
+            // puedes refrescar grupos también:
+            if (tab == 2)
+                await LoadGrupos();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "error",
+                title = "Error",
+                text = ex.Message
+            });
+        }
+    }
+    async Task LoadEquipos() => equipos = await Equipos.GetAllAsync(searchEquipos);
+    void ShowNewEquipo() => showNewEquipo = !showNewEquipo;
+    void EditEquipo(CRMEquipo e) => editEquipo = new CRMEquipo { EquipoId = e.EquipoId, Nombre = e.Nombre, Activo = e.Activo };
+    async Task SaveEquipo() { if (editEquipo is null) return; await Equipos.UpdateAsync(editEquipo); editEquipo = null; await LoadEquipos(); }
+    void CancelEquipo() => editEquipo = null;
+    async Task CreateEquipo() { await Equipos.CreateAsync(nuevoEquipo); nuevoEquipo = new() { Activo = true }; await LoadEquipos(); }
+    async Task DeleteEquipo(int id) { await Equipos.DeleteAsync(id); await LoadEquipos(); }
+
+    // Usuarios
+    async Task LoadUsuarios() => usuarios = await Usuarios.GetAllAsync(searchUsuarios);
+    void ShowNewUsuario() => showNewUsuario = !showNewUsuario;
+    void EditUsuario(CRMUsuario u) => editUsuario = new CRMUsuario { UsuarioId = u.UsuarioId, UserName = u.UserName, Telefono = u.Telefono, Activo = u.Activo };
+    private async Task SaveUsuario()
+    {
+        if (editUsuario is null) return;
+        await Usuarios.UpdateAsync(editUsuario);
+        // sincroniza asignaciones con el estado actual del usuario
+        await Rel.SetActivoByUsuarioAsync(editUsuario.UsuarioId, editUsuario.Activo);
+
+        editUsuario = null;
+        await LoadUsuarios();
+        await RefreshUsersCaches();           // <-- AÑADE
+        await LoadMiembrosYDisponibles();     // <-- AÑADE
+    }
+    void CancelUsuario() => editUsuario = null;
+    private async Task CreateUsuario()
+    {
+        await Usuarios.CreateAsync(nuevoUsuario);
+        nuevoUsuario = new() { Activo = true };
+        await LoadUsuarios();
+        await RefreshUsersCaches();           // <-- AÑADE
+        await LoadMiembrosYDisponibles();     // <-- AÑADE
+    }
+    private async Task DeleteUsuario(int id)
+    {
+        await Usuarios.DeleteAsync(id);
+        await LoadUsuarios();
+        await RefreshUsersCaches();           // <-- AÑADE
+        await LoadMiembrosYDisponibles();     // <-- AÑADE
+    }
+    private async Task OnUsuarioActivoChanged(int usuarioId, bool activo)
+    {
+        try
+        {
+            await Usuarios.ToggleActivoAsync(usuarioId, activo);
+
+            // NUEVO: Propagar a todas las asignaciones del usuario
+            await Rel.SetActivoByUsuarioAsync(usuarioId, activo);
+
+            // Refresca la grilla de usuarios (tab 1)
+            await LoadUsuarios();
+
+            // Refresca CACHES usadas por Asignaciones (tab 2)
+            await RefreshUsersCaches();
+
+            // Si estás en Asignaciones, re-filtra combo según el equipo actual
+            await LoadMiembrosYDisponibles();
+
+            if (tab == 2)
+            {
+                await JS.InvokeVoidAsync("Swal.fire", new
+                {
+                    icon = "success",
+                    title = "Usuarios actualizados",
+                    text = "El combo de asignación se sincronizó con el nuevo estado."
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "error",
+                title = "Error",
+                text = ex.Message
+            });
+        }
+    }
+
+    private async Task RefreshUsersCaches()
+    {
+        // Lista completa (activos/inactivos) para después filtrar disponibles
+        allUsers = await Usuarios.GetAllAsync();
+    }
+
+
+    // --- Asignaciones ---
+    // .NET 8 (bind:after):
+    private async Task OnEquipoChanged()
+    {
+        if (equipoSelId > 0)
+        {
+            await LoadMiembrosYDisponibles();
+            grupos = new();
+        }
+        else
+        {
+            miembros = new();
+            usuariosDisponibles = new();
+            await LoadGrupos();
+        }
+    }
+
+    // .NET 6/7 (usar con @onchange):
+    private async Task HandleEquipoChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e?.Value?.ToString(), out var val))
+            equipoSelId = val;
+
+        await OnEquipoChanged();
+    }
+
+    private async Task LoadMiembrosYDisponibles()
+    {
+        if (equipoSelId <= 0)
+        {
+            miembros = new();
+            usuariosDisponibles = new();
+            return;
+        }
+
+        miembros = await Rel.GetByEquipoAsync(equipoSelId);
+
+        var idsMiembros = miembros.Select(m => m.UsuarioId).ToHashSet();
+        usuariosDisponibles = allUsers
+          .Where(u => u.Activo && !idsMiembros.Contains(u.UsuarioId))
+          .OrderBy(u => u.UserName)
+          .ToList();
+
+        usuarioSelId = 0; // reset combo
+    }
+
+    private async Task LoadGrupos()
+    {
+        grupos = new();
+        foreach (var e in equipos)
+        {
+            var m = await Rel.GetByEquipoAsync(e.EquipoId);
+            grupos.Add(new EquipoGroup { Equipo = e, Miembros = m });
+        }
+    }
+
+    private async Task AddRel()
+    {
+        try
+        {
+            await Rel.AddAsync(equipoSelId, usuarioSelId);
+            await LoadMiembrosYDisponibles();
+
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "success",
+                title = "Asignación realizada",
+                text = "El usuario fue asignado al equipo.",
+                timer = 1400,
+                showConfirmButton = false
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "info",
+                title = "No se puede asignar",
+                text = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "error",
+                title = "Error",
+                text = ex.Message
+            });
+        }
+    }
+
+    private async Task VerSoloEquipo(int id)
+    {
+        equipoSelId = id;
+        await OnEquipoChanged();   // reutiliza tu lógica: carga miembros + oculta agrupado
+    }
+
+
+    private async Task RemoveRel(int id)
+    {
+        try
+        {
+            await Rel.RemoveAsync(id);
+
+            if (equipoSelId > 0)
+                await LoadMiembrosYDisponibles();
+            else
+                await LoadGrupos();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "error",
+                title = "Error al quitar",
+                text = ex.Message
+            });
+        }
+    }
+
+
+    private async Task SaveWebhookSettings()
+    {
+        try
+        {
+            await using var db = await Factory.CreateDbContextAsync();
+            var row = await db.WebhookControls.FirstOrDefaultAsync(x => x.Name == "EvolutionWebhook");
+
+            if (row != null)
+            {
+                row.Enabled = webhookEnabled;
+                row.UpdatedUtc = DateTime.UtcNow;
+                await db.SaveChangesAsync();
+
+                await JS.InvokeVoidAsync("Swal.fire", new
+                {
+                    icon = "success",
+                    title = "Configuración guardada",
+                    text = $"El webhook ahora está {(webhookEnabled ? "activo" : "inactivo")}.",
+                    timer = 2000,
+                    showConfirmButton = false
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("Swal.fire", new
+            {
+                icon = "error",
+                title = "Error al guardar",
+                text = ex.Message
+            });
+        }
+    }
+
+}

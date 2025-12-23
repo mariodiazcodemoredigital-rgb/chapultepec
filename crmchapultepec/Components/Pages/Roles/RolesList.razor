@@ -1,0 +1,197 @@
+﻿@page "/roles"
+
+@inject IUsersService UsersService
+@inject IJSRuntime JS
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using crmchapultepec.services.Interfaces.UsersService
+@using Radzen
+@using Radzen.Blazor
+
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<h3>Gestión de Roles</h3>
+
+<div class="mb-3 d-flex align-items-center">
+  
+    <input class="form-control w-50 d-inline-block"
+           @bind="nuevoRol"
+           @bind:event="oninput"
+           placeholder="Nombre del rol"
+           autocomplete="off" />
+
+    <RadzenButton Icon="add"
+                  Text="Crear Rol"
+                  Class="btn-brand btn-brand-success ms-2"
+                  Title="Crear rol"
+                  Click="@CrearRol" />
+
+</div>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Nombre del Rol</th>
+            <th style="width:240px">Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        @if (roles is null)
+        {
+            <tr><td colspan="2">Cargando...</td></tr>
+        }
+        else if (!roles.Any())
+        {
+            <tr><td colspan="2">No hay roles creados</td></tr>
+        }
+        else
+        {
+            @foreach (var rol in roles)
+            {
+                <tr>
+                    <td>
+                        @if (rolEnEdicion == rol.Id)
+                        {
+                            <input class="form-control"
+                                   style="width:60%;"
+                                   @bind="rolEditado"
+                                   @bind:event="oninput" />
+                        }
+                        else
+                        {
+                            @rol.Name
+                        }
+                    </td>
+                    <td>
+                        @if (rolEnEdicion == rol.Id)
+                        {
+                            <button class="btn btn-brand btn-brand-success" @onclick="() => GuardarEdicionRol(rol.Id)"><i class="fas fa-check"></i> Guardar</button>
+                            <button class="btn btn-brand btn-brand-danger" @onclick="CancelarEdicion"><i class="fas fa-xmark"></i> Cancelar</button>
+                        }
+                        else
+                        {
+                            <RadzenButton Icon="edit"
+                                          Size="ButtonSize.Small"
+                                          ButtonStyle="ButtonStyle.Warning"
+                                          Click="@(() => EditarRol(rol))"
+                                          Style="margin-right:5px" />
+                            <RadzenButton Icon="delete"
+                                          Size="ButtonSize.Small"
+                                          ButtonStyle="ButtonStyle.Danger"
+                                          Click="@(() => ConfirmarEliminarRol(rol.Name))" />
+                        }
+                    </td>
+                </tr>
+            }
+        }
+    </tbody>
+</table>
+
+@code {
+    private string nuevoRol = "";
+    private List<IdentityRole>? roles;
+
+    private string? rolEnEdicion = null;
+    private string rolEditado = "";
+
+    protected override async Task OnInitializedAsync() => await CargarRoles();
+
+    private async Task CargarRoles() => roles = await UsersService.ObtenerRolesAsync();
+
+    private async Task CrearRol()
+    {
+        if (string.IsNullOrWhiteSpace(nuevoRol))
+        {
+            await MostrarAlerta("Debe ingresar un nombre de rol.", "warning");
+            return;
+        }
+
+        var creado = await UsersService.CrearRolAsync(nuevoRol);
+
+        if (creado)
+        {
+            await MostrarAlerta("✅ Rol creado correctamente.", "success");
+            nuevoRol = "";
+            await CargarRoles();
+        }
+        else
+        {
+            await MostrarAlerta("❌ No se pudo crear el rol (puede que ya exista).", "error");
+        }
+    }
+
+    private void EditarRol(IdentityRole rol)
+    {
+        rolEnEdicion = rol.Id;
+        rolEditado = rol.Name;
+    }
+
+    private async Task GuardarEdicionRol(string roleId)
+    {
+        if (string.IsNullOrWhiteSpace(rolEditado))
+        {
+            await MostrarAlerta("Debe ingresar un nombre válido.", "warning");
+            return;
+        }
+
+        var actualizado = await UsersService.ActualizarRolAsync(roleId, rolEditado);
+
+        if (actualizado)
+        {
+            await MostrarAlerta("✅ Rol actualizado correctamente.", "success");
+            rolEnEdicion = null;
+            await CargarRoles();
+        }
+        else
+        {
+            await MostrarAlerta("❌ No se pudo actualizar el rol (puede que ya exista).", "error");
+        }
+    }
+
+    private void CancelarEdicion()
+    {
+        rolEnEdicion = null;
+        rolEditado = "";
+    }
+
+    private async Task ConfirmarEliminarRol(string roleName)
+    {
+        var result = await JS.InvokeAsync<object>("Swal.fire", new
+        {
+            title = "¿Eliminar rol?",
+            text = $"Se eliminará el rol '{roleName}'.",
+            icon = "warning",
+            showCancelButton = true,
+            confirmButtonText = "Sí, eliminar",
+            cancelButtonText = "Cancelar"
+        });
+
+        var json = result?.ToString();
+        if (json != null && json.Contains("\"isConfirmed\":true"))
+        {
+            var eliminado = await UsersService.EliminarRolAsync(roleName);
+
+            if (eliminado)
+            {
+                await MostrarAlerta("✅ Rol eliminado correctamente.", "success");
+                await CargarRoles();
+            }
+            else
+            {
+                await MostrarAlerta("❌ No se pudo eliminar el rol.", "error");
+            }
+        }
+    }
+
+    private Task MostrarAlerta(string mensaje, string tipo)
+        => JS.InvokeVoidAsync("Swal.fire", new
+        {
+            icon = tipo,
+            title = tipo == "success" ? "Éxito" : "Aviso",
+            html = mensaje,
+            confirmButtonText = "OK",
+            target = "body"
+        }).AsTask();
+}

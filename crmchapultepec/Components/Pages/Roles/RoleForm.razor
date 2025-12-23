@@ -1,0 +1,80 @@
+﻿@page "/roles/new"
+@page "/roles/edit/{RoleId}"
+
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IUsersService UsersService
+
+@using Microsoft.AspNetCore.Identity
+@using crmchapultepec.services.Interfaces.UsersService
+
+<h3>@(EsEdicion ? "Editar Rol" : "Nuevo Rol")</h3>
+
+<div class="mb-3">
+    <label>Nombre del Rol:</label>
+    <input class="form-control w-50" @bind="roleName" />
+</div>
+
+<button class="btn btn-success" @onclick="Guardar">@((EsEdicion ? "Actualizar" : "Crear"))</button>
+<button class="btn btn-secondary" @onclick="Volver">Cancelar</button>
+
+@code {
+    [Parameter] public string? RoleId { get; set; }
+
+    private string roleName = "";
+    private bool EsEdicion => !string.IsNullOrEmpty(RoleId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (EsEdicion)
+        {
+            var roles = await UsersService.ObtenerRolesAsync();
+            var rol = roles.FirstOrDefault(r => r.Id == RoleId);
+            if (rol != null)
+                roleName = rol.Name;
+        }
+    }
+
+    private async Task Guardar()
+    {
+        if (string.IsNullOrWhiteSpace(roleName))
+        {
+            await MostrarAlerta("Debe ingresar un nombre de rol.", "warning");
+            return;
+        }
+
+        bool exito = false;
+
+        if (EsEdicion)
+        {
+            exito = await UsersService.ActualizarRolAsync(RoleId!, roleName); // 🔹 Debes implementar este método
+        }
+        else
+        {
+            exito = await UsersService.CrearRolAsync(roleName);
+        }
+
+        if (exito)
+        {
+            await MostrarAlerta("✅ Rol guardado correctamente.", "success");
+            Navigation.NavigateTo("/roles");
+        }
+        else
+        {
+            await MostrarAlerta("❌ No se pudo guardar el rol (puede que ya exista).", "error");
+        }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/roles");
+
+    private async Task MostrarAlerta(string mensaje, string tipo)
+    {
+        await JS.InvokeVoidAsync("Swal.fire", new
+        {
+            icon = tipo,
+            title = tipo == "success" ? "Éxito" : "Aviso",
+            html = mensaje,
+            confirmButtonText = "OK"
+        });
+    }
+}
