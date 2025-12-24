@@ -71,7 +71,7 @@ namespace crmchapultepec.entities.EvolutionWebhook
         //Navegacion con CrmMessageMedia
         public CrmMessageMedia? Media { get; set; }
 
-        public string Reaction { get; set; }
+        public string? Reaction { get; set; }
     }
 
 }

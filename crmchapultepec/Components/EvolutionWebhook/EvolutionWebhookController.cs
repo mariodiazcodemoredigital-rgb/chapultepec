@@ -1011,7 +1011,11 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 // 1. Extraer el ID del mensaje al que se reacciona
                 using var doc = JsonDocument.Parse(snap.RawPayloadJson);
                 var reactionNode = doc.RootElement.GetProperty("data").GetProperty("message").GetProperty("reactionMessage");
+                
+                // Obtenemos el ID del mensaje original
                 var targetExternalId = reactionNode.GetProperty("key").GetProperty("id").GetString();
+
+                // Obtenemos el emoji
                 var emoji = reactionNode.TryGetProperty("text", out var textProp) ? textProp.GetString() : "";
 
                 // 2. Buscar el mensaje original en la base de datos
