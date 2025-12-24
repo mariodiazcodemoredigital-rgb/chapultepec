@@ -774,7 +774,22 @@ namespace crmchapultepec.Components.EvolutionWebhook
                             messageKind = MessageKind.Sticker;
                             mediaType = "sticker";
                             var stk = message.GetProperty("stickerMessage");
-                            mediaUrl = stk.TryGetProperty("url", out var url) ? url.GetString() : null;
+
+                            var rawUrl = stk.TryGetProperty("url", out var urlProp) ? urlProp.GetString() : null;
+                            var dPath = stk.TryGetProperty("directPath", out var dpProp) ? dpProp.GetString() : null;
+
+                            //mediaUrl = stk.TryGetProperty("url", out var url) ? url.GetString() : null;
+                            // Si la url apunta a web o está vacía, pero tenemos directPath
+                            if ((string.IsNullOrEmpty(rawUrl) || rawUrl.Contains("web.whatsapp.net")) && !string.IsNullOrEmpty(dPath))
+                            {
+                                // El host estándar para archivos multimedia es mmg.whatsapp.net
+                                mediaUrl = $"https://mmg.whatsapp.net{dPath}";
+                            }
+                            else
+                            {
+                                mediaUrl = rawUrl;
+                            }
+
                             mediaMime = stk.TryGetProperty("mimetype", out var mime) ? mime.GetString() : "image/webp";
                             mediaKey = stk.TryGetProperty("mediaKey", out var mk) ? mk.GetString() : null;
                             fileSha256 = stk.TryGetProperty("fileSha256", out var fsh) ? fsh.GetString() : null;
