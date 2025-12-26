@@ -1007,6 +1007,20 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
             if (!msg.HasMedia) return;
 
+            // 1. Obtener la zona horaria de México (puedes mover esto al inicio del método)
+            TimeZoneInfo mexicoZone;
+            try
+            {
+                mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time (Mexico)");
+            }
+            catch
+            {
+                mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City");
+            }
+
+            // 2. Convertir la hora actual (NOW) a hora de México
+            var nowMexico = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, mexicoZone);
+
             var media = new CrmMessageMedia
             {
                 MessageId = msg.Id,
@@ -1022,7 +1036,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 FileLength = s.FileLength,
                 PageCount = s.PageCount,
                 ThumbnailBase64 = s.ThumbnailBase64,
-                CreatedUtc = DateTime.UtcNow
+                CreatedUtc = nowMexico
             };
 
             db.CrmMessageMedias.Add(media);
