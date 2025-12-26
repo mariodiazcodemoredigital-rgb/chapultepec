@@ -8,9 +8,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using static Azure.Core.HttpHeader;
+using static MudBlazor.Colors;
 
 namespace crmchapultepec.Components.EvolutionWebhook
 {
@@ -44,6 +47,9 @@ namespace crmchapultepec.Components.EvolutionWebhook
             _ipWhitelist = (cfg["Evolution:WebhookIpWhitelist"] ?? "")
                             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         }
+
+        
+
         [HttpGet("all")]
         public async Task<IActionResult> GetAll(CancellationToken ct)
         {
@@ -117,6 +123,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
         [HttpPost]
         public async Task<IActionResult> Post([FromServices] IWebhookControlService toggle, CancellationToken ct)
         {
+          
+
             // 🔴 Switch General para apagar los insert de Evolution API
             if (!await toggle.IsEvolutionEnabledAsync(ct))
             {
@@ -554,11 +562,34 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 .Replace("@lid", "")
                 .Replace("@c.us", "");
 
-            DateTime? messageDateUtc = null;
+            TimeZoneInfo mexicoZone;
+            try
+            {
+                mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time (Mexico)");
+            }
+            catch
+            {
+                mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City");
+            }
+
+            // 1. Declaramos la variable con un valor por defecto (por si el JSON no trae fecha)
+            DateTime messageDate = DateTime.UtcNow;
+            DateTime receivedLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, mexicoZone);
+
             if (data.TryGetProperty("messageTimestamp", out var tsElement))
             {
+                // 1. Obtener el timestamp del elemento
                 var timestamp = ReadUnixTimestamp(tsElement);
-                messageDateUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
+
+                // 2. Convertir el Unix Timestamp a un DateTimeOffset en UTC
+                var dateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(timestamp);
+
+                // 3. Definir la zona horaria de México (ajusta el ID según tu región si no es CDMX)
+                // En Windows es "Central Standard Time (Mexico)", en Linux/Docker suele ser "America/Mexico_City"
+                
+
+                // 4. Convertir a la hora local de esa zona
+                messageDate = TimeZoneInfo.ConvertTimeFromUtc(dateTimeOffset.UtcDateTime, mexicoZone);
             }
 
             //  El ThreadId de auditoría debe ser consistente: wa:numero
@@ -570,7 +601,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 ThreadId = threadId,
                 Source = "evolution",
                 PayloadJson = rawBody,
-                ReceivedUtc = DateTime.UtcNow,
+                ReceivedUtc = receivedLocal,
                 Processed = false,
 
                 Instance = instance,
@@ -581,7 +612,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 Sender = sender,
                 CustomerPhone = customerPhone, // Guardamos el número limpio
                 CustomerDisplayName = pushName,
-                MessageDateUtc = messageDateUtc,
+                MessageDateUtc = messageDate,
 
                 Notes = HttpContext.Connection.RemoteIpAddress?.ToString()
             };
@@ -654,8 +685,23 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 if (!data.TryGetProperty("messageTimestamp", out var tsElement))
                     return null;
 
+                // 1. Definir la zona horaria (igual que en el método anterior)
+                TimeZoneInfo mexicoZone;
+                try
+                {
+                    mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time (Mexico)");
+                }
+                catch
+                {
+                    mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City");
+                }
+
+                // 2. Obtener el timestamp y convertir
                 var timestamp = ReadUnixTimestamp(tsElement);
-                var createdUtc = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
+
+                // 3. Convertir de Unix a UTC y luego a la hora local de México
+                var utcDateTime = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
+                var createdLocal = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, mexicoZone);
 
                 // =========================
                 // Source
@@ -872,7 +918,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     ExternalTimestamp = timestamp,
                     Source = source,
                     RawPayloadJson = rawBody,
-                    CreatedAtUtc = createdUtc
+                    CreatedAtUtc = createdLocal
                 };
             }
             catch (Exception ex)
@@ -1058,7 +1104,21 @@ namespace crmchapultepec.Components.EvolutionWebhook
             if (await MessageExistsAsync(snap, thread.Id, ct))
                 return;
 
-            var rawHash = ComputeSha256(snap.RawPayloadJson);
+            var rawHash = ComputeSha256(snap.RawPayloadJson);     
+
+            // 1. Obtener la zona horaria de México (puedes mover esto al inicio del método)
+            TimeZoneInfo mexicoZone;
+            try
+            {
+                mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time (Mexico)");
+            }
+            catch
+            {
+                mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City");
+            }
+
+            // 2. Convertir la hora actual (NOW) a hora de México
+            var nowMexico = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, mexicoZone);
 
             var message = new CrmMessage
             {
@@ -1083,7 +1143,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 MessageKind = (int)snap.MessageKind,
                 HasMedia = snap.MediaUrl != null,
 
-                CreatedUtc = DateTime.UtcNow
+                CreatedUtc = nowMexico
             };
 
             db.CrmMessages.Add(message);
