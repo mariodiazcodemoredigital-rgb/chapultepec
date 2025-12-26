@@ -5,6 +5,8 @@
 @using System.Text.Encodings.Web
 @using System.Text.RegularExpressions
 
+@inject CRMxUsuariosService Usuarios
+
 <div class="crm-inbox__threadlist">
 
     <div class="crm-inbox__tabs">
@@ -35,9 +37,19 @@
             @if (showSortMenu)
             {
                 <ul class="pill-menu" role="listbox">
-                    <li class="pill-option" @onclick="@(() => SelectSort(SortMode.RecentDesc))">Más recientes</li>
-                    <li class="pill-option" @onclick="@(() => SelectSort(SortMode.OldestAsc))">Más antiguos</li>
-                    <li class="pill-option" @onclick="@(() => SelectSort(SortMode.UnreadFirst))">No leídos primero</li>
+                    <li class="pill-option @(sortMode == SortMode.RecentDesc ? "selected" : "")"
+                        role="option"
+                        @onclick="@(() => SelectSort(SortMode.RecentDesc))">Más recientes
+                    </li>
+
+                    <li class="pill-option @(sortMode == SortMode.OldestAsc ? "selected" : "")"
+                        role="option"
+                        @onclick="@(() => SelectSort(SortMode.OldestAsc))">Más antiguos
+                    </li>
+                    <li class="pill-option @(sortMode == SortMode.UnreadFirst ? "selected" : "")"
+                        role="option"
+                        @onclick="@(() => SelectSort(SortMode.UnreadFirst))">No leídos primero
+                    </li>
                 </ul>
             }
         </div>
@@ -71,10 +83,15 @@
 
                         @if (!string.IsNullOrWhiteSpace(t.AssignedTo))
                         {
-                            <div class="crm-inbox__assignee-badge">
-                                <i class="fas fa-user-check"></i>
-                                <span>@t.AssignedTo</span>
-                            </div>
+                            var agentName = ResolveThreadAssignee(t.AssignedTo);
+
+                            @if (!string.IsNullOrEmpty(agentName))
+                            {
+                                <div class="crm-inbox__assignee-badge">
+                                    <i class="fas fa-user-check"></i>
+                                    <span>@agentName</span>
+                                </div>
+                            }
                         }
 
                         <div class="crm-inbox__preview">
@@ -106,6 +123,9 @@
     [Parameter] public InboxFilter Selected { get; set; }
     [Parameter] public EventCallback<InboxFilter> OnFilterChange { get; set; }
 
+    // Diccionario para evitar consultar la DB varias veces por el mismo usuario
+    private Dictionary<int, string> userNamesCache = new();
+
     private string searchText = "";
     private bool showSortMenu;
 
@@ -113,6 +133,27 @@
     private IEnumerable<CrmThread> VisibleThreads => ApplySort(
         Threads.Where(t => MatchesSearch(t, searchText))
     );
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Extraer todos los IDs únicos de los hilos visibles que no están en cache
+        var uniqueIds = Threads
+            .Where(t => !string.IsNullOrEmpty(t.AssignedTo) && int.TryParse(t.AssignedTo, out _))
+            .Select(t => int.Parse(t.AssignedTo!))
+            .Distinct()
+            .Where(id => !userNamesCache.ContainsKey(id))
+            .ToList();
+
+        if (uniqueIds.Any())
+        {
+            // Si tienes muchos, podrías usar un GetAll en el servicio,
+            // pero por ahora tus GetAsync individuales funcionarán bien
+            foreach (var id in uniqueIds)
+            {
+                _ = LoadUserNameAsync(id);
+            }
+        }
+    }
 
     private bool MatchesSearch(CrmThread t, string q)
     {
@@ -187,5 +228,40 @@
         if (string.IsNullOrWhiteSpace(query)) return new MarkupString(safe);
 
         return new MarkupString(Regex.Replace(safe, Regex.Escape(query), m => $"<mark>{m.Value}</mark>", RegexOptions.IgnoreCase));
+    }
+
+    private string ResolveThreadAssignee(string? assignedTo)
+    {
+        if (string.IsNullOrWhiteSpace(assignedTo)) return "";
+
+        if (int.TryParse(assignedTo, out var uid))
+        {
+            if (userNamesCache.TryGetValue(uid, out var name))
+            {
+                return name;
+            }
+
+            // Disparamos la carga en segundo plano si no se está cargando ya
+            _ = LoadUserNameAsync(uid);
+            return ""; // No mostramos nada mientras carga para evitar el "salto" del ID
+        }
+
+        return assignedTo;
+    }
+
+    private async Task LoadUserNameAsync(int uid)
+    {
+        // Evitamos llamadas duplicadas si ya estamos procesando este ID
+        if (userNamesCache.ContainsKey(uid)) return;
+
+        // Marcamos temporalmente para no repetir la llamada
+        userNamesCache[uid] = "...";
+
+        var user = await Usuarios.GetAsync(uid);
+        if (user != null)
+        {
+            userNamesCache[uid] = user.UserName;
+            StateHasChanged(); // Refrescamos la lista cuando el nombre llegue
+        }
     }
 }

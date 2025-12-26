@@ -3,6 +3,10 @@
 @using crmchapultepec.services.Implementation.CRM
 
 @* Inyectamos el servicio para poder guardar los cambios del contacto *@
+@inject CRMxEquiposService Equipos
+@inject CRMxUsuariosService Usuarios
+@inject CRMxEquiposUsuariosService Rel
+
 @inject CRMInboxService Inbox
 @inject IJSRuntime JS
 
@@ -40,11 +44,19 @@ else
                 @if (!string.IsNullOrWhiteSpace(Thread.AssignedTo))
                 {
                     <div class="crm-inbox__assignee">
-                        <i class="fas fa-user-circle"></i> @Thread.AssignedTo
+                        <i class="fas fa-user-circle"></i>&nbsp;
+                        @if (int.TryParse(Thread.AssignedTo, out var uid) && !userCache.ContainsKey(uid))
+                        {
+                            <span class="loading-text">Cargando...</span> @* Aquí no se ve el ID *@
+                        }
+                        else
+                        {
+                            @ResolveAssigneeName(Thread.AssignedTo)
+                        }
                     </div>
                 }
 
-                <button class="btn btn--reassign" @onclick="OnAssignToMe">
+                <button class="btn btn--reassign" @onclick="OpenAssignModal">
                     @(string.IsNullOrWhiteSpace(Thread.AssignedTo) ? "Asignar a mí" : "Reasignar")
                 </button>
             </div>
@@ -135,6 +147,52 @@ else
         </div>
     </div>
 }
+@if (showAssignModal)
+{
+    <div class="overlay">
+        <div class="modal">
+            <div class="modal__header">
+                <div class="modal__title">Asignar Agente</div>
+                <button class="btn btn-ghost" @onclick="CloseAssignModal">✕</button>
+            </div>
+
+            <div class="modal__body">
+                @if (cargando)
+                {
+                    <div class="muted">Cargando equipos...</div>
+                }
+                else
+                {
+                    @foreach (var equipo in equiposVm)
+                    {
+                        <div class="modal__group" style="margin-bottom: 1rem;">
+                            <div class="modal__group-title" style="font-weight: bold; color: var(--brand-color);">
+                                📁 @equipo.Nombre
+                            </div>
+                            @foreach (var miembro in equipo.Miembros)
+                            {
+                                <label class="radio-row" style="display: block; padding: 5px; cursor: pointer;">
+                                    <input type="radio" name="agente"
+                                           checked="@(selectedUsuarioId == miembro.UsuarioId)"
+                                           @onchange="() => SelectUsuario(miembro.UsuarioId)" />
+                                    <span>@miembro.UserName <small class="muted">(@miembro.Telefono)</small></span>
+                                </label>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="modal__footer">
+                <button class="btn btn--secondary" @onclick="CloseAssignModal">Cancelar</button>
+                <button class="btn btn--primary" @onclick="ConfirmAssign"
+                        disabled="@(selectedUsuarioId == null)">
+                    Confirmar Asignación
+                </button>
+            </div>
+        </div>
+    </div>
+}
 
 @if (showContactModal)
 {
@@ -186,10 +244,56 @@ else
 
     private bool _shouldScroll = false;
 
+    // ViewModels internos
+    private class EquipoVM
+    {
+        public int EquipoId { get; set; }
+        public string Nombre { get; set; } = "";
+        public List<MiembroVM> Miembros { get; set; } = new();
+    }
+    private class MiembroVM
+    {
+        public int UsuarioId { get; set; }
+        public string UserName { get; set; } = "";
+        public string Telefono { get; set; } = "";
+        public bool Activo { get; set; }
+    }
+
+    // --- Modal Asignación ---
+    private bool showAssignModal;
+    private bool cargando;
+    private int? selectedUsuarioId;
+
+    private readonly List<EquipoVM> equiposVm = new();
+    private readonly Dictionary<int, CRMUsuario> userCache = new();
+
     // Detecta cuando cambia el hilo de conversación
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         _shouldScroll = true;
+
+        if (Thread != null && !string.IsNullOrWhiteSpace(Thread.AssignedTo))
+        {
+            if (int.TryParse(Thread.AssignedTo, out var uid))
+            {
+                // Solo consultamos la DB si el usuario NO está ya en el cache
+                if (!userCache.ContainsKey(uid))
+                {
+                    // Llamamos a tu servicio GetAsync(int id)
+                    var user = await Usuarios.GetAsync(uid);
+
+                    if (user != null)
+                    {
+                        // Lo guardamos en el cache para no volver a consultar mientras
+                        // el componente esté vivo
+                        userCache[uid] = user;
+
+                        // Notificamos a Blazor que el nombre ya llegó y debe refrescar la UI
+                        StateHasChanged();
+                    }
+                }
+            }
+        }
     }
 
     // Ejecuta el scroll después de que el HTML se ha renderizado
@@ -243,5 +347,94 @@ else
         await OnContactUpdated.InvokeAsync(new ContactChangedArgs(Thread.ThreadId, contactName, contactPhone, contactEmail, Thread.CompanyId));
 
         CloseContactModal();
+    }
+
+    private async Task OpenAssignModal()
+    {
+        if (Thread is null) return;
+
+        showAssignModal = true;
+        cargando = true;
+        equiposVm.Clear();
+
+        // 1. Cargar datos maestros
+        var todosLosEquipos = await Equipos.GetAllAsync();
+        var todosLosUsuarios = await Usuarios.GetAllAsync();
+
+        // Llenar cache de usuarios para acceso rápido
+        userCache.Clear();
+        foreach (var u in todosLosUsuarios) userCache[u.UsuarioId] = u;
+
+        // 2. Filtrar equipos activos y armar el árbol
+        var equiposActivos = todosLosEquipos.Where(e => e.Activo).OrderBy(e => e.Nombre);
+
+        foreach (var eq in equiposActivos)
+        {
+            // Obtener relaciones de este equipo
+            var relaciones = await Rel.GetByEquipoAsync(eq.EquipoId);
+
+            var vm = new EquipoVM
+            {
+                EquipoId = eq.EquipoId,
+                Nombre = eq.Nombre,
+                Miembros = relaciones
+                    .Where(r => r.Activo) // Solo miembros activos en el equipo
+                    .Select(r => new MiembroVM
+                    {
+                        UsuarioId = r.UsuarioId,
+                        UserName = userCache.TryGetValue(r.UsuarioId, out var u) ? u.UserName : $"ID {r.UsuarioId}",
+                        Telefono = userCache.TryGetValue(r.UsuarioId, out var u2) ? u2.Telefono ?? "" : ""
+                    })
+                    .OrderBy(m => m.UserName)
+                    .ToList()
+            };
+
+            if (vm.Miembros.Any()) equiposVm.Add(vm);
+        }
+
+        // 3. Preseleccionar si ya hay alguien asignado
+        selectedUsuarioId = null;
+        if (int.TryParse(Thread.AssignedTo, out var currentId))
+            selectedUsuarioId = currentId;
+
+        cargando = false;
+        StateHasChanged();
+    }
+
+    private void CloseAssignModal() => showAssignModal = false;
+    private void SelectUsuario(int id) => selectedUsuarioId = id;
+
+    private async Task ConfirmAssign()
+    {
+        if (Thread is null || !selectedUsuarioId.HasValue) return;
+
+        // Guardar asignación (Asegúrate que Inbox.AssignAsync acepte estos params)
+        await Inbox.AssignAsync(Thread.ThreadId, selectedUsuarioId.Value.ToString());
+
+        // Actualizar UI localmente
+        Thread.AssignedTo = selectedUsuarioId.Value.ToString();
+
+        showAssignModal = false;
+        StateHasChanged();
+    }
+
+    private string ResolveAssigneeName(string? assigned)
+    {
+        if (string.IsNullOrWhiteSpace(assigned)) return "Sin asignar";
+
+        // Si el valor es un número, buscamos en el cache
+        if (int.TryParse(assigned, out var uid))
+        {
+            if (userCache.TryGetValue(uid, out var user))
+            {
+                return user.UserName; // Devolvemos el nombre real
+            }
+
+            // Si no está en cache (porque no hemos abierto el modal),
+            // podrías dejarlo así o disparar una carga rápida.
+            return $" {uid}";
+        }
+
+        return assigned; // Si era un texto (como "Sistema"), lo devuelve tal cual
     }
 }

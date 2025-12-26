@@ -1,0 +1,613 @@
+﻿.sh-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 14px
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px
+}
+
+.filter-label {
+    font-size: .8rem;
+    color: #64748b;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em
+}
+
+.seg {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap
+}
+
+.seg-btn {
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    border-radius: 9999px;
+    padding: .45rem .8rem;
+    font-weight: 700
+}
+
+    .seg-btn.active {
+        background: #2563eb;
+        color: #fff;
+        border-color: #2563eb;
+        box-shadow: 0 6px 12px rgba(37,99,235,.18)
+    }
+
+.filter-actions {
+    margin-left: auto
+}
+
+/* --- KPIs --- */
+.sh-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
+    gap: 12px;
+    margin-bottom: 12px
+}
+
+.kpi {
+    border-radius: 14px;
+    color: #fff;
+    padding: 14px;
+    box-shadow: 0 6px 14px rgba(0,0,0,.12)
+}
+
+.kpi__label {
+    font-size: .9rem;
+    opacity: .9
+}
+
+.kpi__value {
+    font-size: 2rem;
+    font-weight: 900;
+    line-height: 1.1
+}
+
+.kpi__sub {
+    font-size: .8rem;
+    opacity: .85;
+    margin-top: 2px
+}
+
+.kpi--blue {
+    background: #2563eb
+}
+
+.kpi--green {
+    background: #16a34a
+}
+
+.kpi--amber {
+    background: #f59e0b
+}
+
+.kpi--red {
+    background: #e11d48
+}
+
+.kpi--violet {
+    background: #7c3aed
+}
+
+/* --- Charts grid --- */
+.sh-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(280px,1fr));
+    gap: 12px;
+    margin-bottom: 14px
+}
+
+.card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 12px
+}
+
+.card__title {
+    font-weight: 800;
+    margin-bottom: 6px;
+    color: #111827
+}
+
+/* --- Paneles y tablas --- */
+.sh-panel {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 10px;
+    margin-bottom: 12px
+}
+
+.panel__title {
+    font-weight: 800;
+    margin: 4px 6px 8px;
+    color: #0f172a
+}
+
+.sh-table {
+    width: 100%;
+    border-collapse: collapse
+}
+
+    .sh-table th, .sh-table td {
+        padding: 8px 10px;
+        border-top: 1px solid #eef2f7;
+        text-align: left
+    }
+
+    .sh-table thead th {
+        border-top: none;
+        color: #475569;
+        font-size: .9rem
+    }
+
+/* Chips canal */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 9999px;
+    padding: .2rem .6rem;
+    border: 1px solid #e5e7eb;
+    background: #f8fafc
+}
+
+.chip__icon {
+    opacity: .6
+}
+
+.chip--wa {
+    background: #e6f9ef;
+    border-color: #b7e8cc;
+    color: #0f5132
+}
+
+.chip--ms {
+    background: #eef2ff;
+    border-color: #cbd5ff;
+    color: #1e3a8a
+}
+
+.chip--ig {
+    background: #fff1f2;
+    border-color: #fecdd3;
+    color: #9f1239
+}
+
+.chip--wb {
+    background: #ecfeff;
+    border-color: #bae6fd;
+    color: #075985
+}
+
+.chip--muted {
+    color: #6b7280
+}
+
+/* Badges severidad */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: .15rem .5rem;
+    border-radius: 8px;
+    font-weight: 800
+}
+
+.badge--warn {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fed7aa
+}
+
+.badge--danger {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca
+}
+
+/* Filas con severidad (resaltado sutil) */
+.sev-danger {
+    background: linear-gradient(90deg,rgba(244,63,94,.08),transparent)
+}
+
+.sev-warn {
+    background: linear-gradient(90deg,rgba(245,158,11,.08),transparent)
+}
+
+.muted {
+    color: #6b7280
+}
+
+
+/* ===== Toolbar y grupos ===== */
+.sh-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+    .sh-toolbar {
+        grid-template-columns: 1fr;
+    }
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filter-label {
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    color: #334155;
+}
+
+/* ===== Botón pill + menú ===== */
+.pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: .52rem .9rem;
+    border-radius: 9999px;
+    border: 1px solid #dbe3f0;
+    background: #fff;
+    color: #0f172a;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(16,24,40,.06);
+}
+
+    .pill-btn:hover {
+        background: #f8fafc;
+    }
+
+.pill-caret {
+    opacity: .7;
+}
+
+.pill-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.pill-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 240px;
+    padding: 6px;
+    background: #fff;
+    border: 1px solid #e5eaf2;
+    border-radius: 12px;
+    box-shadow: 0 12px 24px rgba(2,6,23,.15);
+    z-index: 30;
+}
+
+.pill-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: .55rem .65rem;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+    .pill-option:hover {
+        background: #f6f8fc;
+    }
+
+    .pill-option.selected {
+        background: #eaf3ff;
+        border: 1px solid #bfd6ff;
+    }
+
+.pill-check {
+    color: #2563eb;
+    font-weight: 900;
+}
+
+/* ===== Segmentos (Canal / Rango) ===== */
+.seg {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    background: #f7f8fb;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid #e7ecf5;
+}
+
+.seg-btn {
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #0f172a;
+    padding: .45rem .75rem;
+    border-radius: 9999px;
+    font-weight: 700;
+}
+
+    .seg-btn:hover {
+        background: #f9fafb;
+    }
+
+    .seg-btn.active {
+        background: #eaf3ff;
+        border-color: #bfd6ff;
+        color: #1e3a8a;
+        box-shadow: inset 0 0 0 1px rgba(37,99,235,.35);
+    }
+
+/* ===== KPIs: alto contraste y accesibles ===== */
+.sh-kpis {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+@media (max-width: 1200px) {
+    .sh-kpis {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 700px) {
+    .sh-kpis {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.kpi {
+    background: #ffffff;
+    border: 1px solid #e6ebf5;
+    border-radius: 14px;
+    padding: 12px 14px;
+    box-shadow: 0 6px 14px rgba(2,6,23,.05);
+}
+
+.kpi__label {
+    font-size: .78rem;
+    letter-spacing: .02em;
+    color: #475569;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.kpi__value {
+    font-size: 2rem;
+    line-height: 1;
+    font-weight: 900;
+    color: #0f172a;
+}
+
+.kpi__sub {
+    font-size: .78rem;
+    color: #6b7280;
+    margin-top: 4px;
+}
+
+/* Acentos por severidad (solo borde y chip, texto oscuro siempre) */
+.kpi--ok {
+    border-color: #c7f0d3;
+    box-shadow: 0 8px 18px rgba(16,185,129,.15);
+}
+
+.kpi--warn {
+    border-color: #ffe4b5;
+    box-shadow: 0 8px 18px rgba(245,158,11,.15);
+}
+
+.kpi--danger {
+    border-color: #fecaca;
+    box-shadow: 0 8px 18px rgba(239,68,68,.15);
+}
+
+/* Si prefieres una tira pequeña de color arriba */
+.kpi::before {
+    content: "";
+    display: block;
+    height: 4px;
+    border-radius: 10px 10px 0 0;
+    margin: -12px -14px 10px -14px;
+    background: linear-gradient(90deg,#93c5fd,#2563eb);
+}
+
+.kpi.kpi--warn::before {
+    background: linear-gradient(90deg,#fde68a,#f59e0b);
+}
+
+.kpi.kpi--danger::before {
+    background: linear-gradient(90deg,#fca5a5,#ef4444);
+}
+
+.kpi.kpi--ok::before {
+    background: linear-gradient(90deg,#86efac,#16a34a);
+}
+
+
+/* Toolbar en grid, todas las tarjetas de filtro con misma altura */
+.sh-toolbar {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 12px;
+    align-items: stretch; /* estira los hijos a la misma altura */
+    margin: 12px 0 18px;
+}
+
+    /* Distribución: ajusta spans a tu gusto (ej. 3/3/4 + acciones) */
+    .sh-toolbar .filter-group {
+        grid-column: span 4;
+    }
+
+    .sh-toolbar .filter-actions {
+        grid-column: span 12;
+        display: flex;
+        align-items: center;
+    }
+
+/* Caja del filtro: mismo patrón, título arriba, contenido ocupa el resto */
+.filter-group {
+    display: grid;
+    grid-template-rows: 22px 1fr; /* título fijo + contenido flexible */
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px 12px;
+    min-height: 88px; /* <-- fuerza altura mínima uniforme */
+    box-shadow: 0 1px 0 rgba(16,24,40,.04);
+}
+
+/* Título consistente */
+.filter-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    line-height: 22px; /* alinea verticalmente */
+    letter-spacing: .02em;
+}
+
+/* Contenedor de controles, centrado vertical y con wrap cuando sea necesario */
+.filter-box {
+    display: flex;
+    align-items: center; /* centra verticalmente el/los controles */
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Botón de “Negocio” (pill) con altura uniforme */
+.pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px; /* altura uniforme */
+    padding: 0 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #0f172a;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+    .pill-btn:hover {
+        background: #f1f5f9;
+    }
+
+/* Menú desplegable del pill (no afecta altura de la tarjeta) */
+.pill-dropdown {
+    position: relative;
+}
+
+.pill-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 20;
+    min-width: 220px;
+    max-height: 280px;
+    overflow: auto;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 6px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.pill-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+    .pill-option:hover {
+        background: #f8fafc;
+    }
+
+    .pill-option.selected {
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+
+.pill-check {
+    margin-left: 10px;
+}
+
+/* Segmentos (Canal/Rango): altura y alineación uniforme */
+.seg {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.seg-btn {
+    height: 36px; /* altura uniforme */
+    padding: 0 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #0f172a;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+    .seg-btn:hover {
+        background: #f8fafc;
+    }
+
+    .seg-btn.active {
+        background: #e8f1ff;
+        border-color: #bfdbfe;
+        color: #1d4ed8;
+    }
+
+/* Acciones alineadas */
+.filter-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+/* Responsive: en pantallas chicas apilamos */
+@media (max-width: 1024px) {
+    .sh-toolbar .filter-group {
+        grid-column: span 6;
+    }
+
+    .sh-toolbar .filter-actions {
+        grid-column: span 6;
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 640px) {
+    .sh-toolbar {
+        grid-template-columns: repeat(1, 1fr);
+    }
+
+        .sh-toolbar .filter-group, .sh-toolbar .filter-actions {
+            grid-column: span 1;
+        }
+}
+
+.sh-charts .card > div[id] { /* el div del gráfico directo */
+    min-height: 220px; /* coincide con el viewBox vertical que usas */
+}
