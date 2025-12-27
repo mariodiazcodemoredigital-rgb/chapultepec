@@ -1226,6 +1226,15 @@
 .crm-inbox__msg-row > .msg {
     min-width: 0; /* CLAVE: permite que el flex item se encoja */
     max-width: 75%; /* limita ancho de burbuja+meta respecto al panel */
+
+    overflow-wrap: break-word;
+    word-break: normal;
+    white-space: pre-wrap;
+    display: block;
+    margin: 0;
+    padding: 0;
+    line-height: 0.65;
+    vertical-align: top;
 }
 
 /* Para mensajes del agente (a la derecha): empuja el contenido al borde derecho */
@@ -1672,6 +1681,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.0;
 }
 
 /* Hacerlo clicable con accesibilidad */

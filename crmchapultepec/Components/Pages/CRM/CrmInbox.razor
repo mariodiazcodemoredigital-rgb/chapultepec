@@ -183,16 +183,28 @@
     {
         _loading = true; StateHasChanged();
         try
-        {
+        {           
             Threads = await Inbox.GetThreadsAsync(Selected, SearchText);
 
-            if (SelectedThreadId is null || !Threads.Any(t => t.ThreadId == SelectedThreadId))
-                SelectedThreadId = Threads.FirstOrDefault()?.ThreadId;
-
-            if (SelectedThreadId is not null)
+            // Si la lista de la izquierda está vacía (contador 0)
+            if (Threads == null || !Threads.Any())
             {
-                // Solo cargamos si no tenemos ya uno cargado o si queremos refrescar al inicio
-                SelectedThread = await Inbox.GetThreadAsync(SelectedThreadId);
+                SelectedThreadId = null;
+                SelectedThread = null; // Asegura que el panel derecho se limpie
+            }
+            else
+            {
+                // Si el hilo que estaba seleccionado ya no existe en el nuevo filtro
+                if (SelectedThreadId == null || !Threads.Any(t => t.ThreadId == SelectedThreadId))
+                {
+                    // Opcional: Auto-seleccionar el primero o dejar vacío
+                    // SelectedThreadId = Threads.First().ThreadId;
+                    // SelectedThread = await Inbox.GetThreadAsync(SelectedThreadId);
+
+                    // Recomendado: Limpiar si el hilo actual no pertenece al nuevo filtro
+                    SelectedThreadId = null;
+                    SelectedThread = null;
+                }
             }
         }
         finally
@@ -205,6 +217,7 @@
     {
         Selected = f;
         SelectedThreadId = null;
+        SelectedThread = null; //Limpia el objeto para cerrar el chat actual
         _mobileShowChat = false;
         await LoadThreadsAsync();
     }
@@ -237,6 +250,7 @@
     {
         SearchText = string.IsNullOrWhiteSpace(text) ? null : text;
         SelectedThreadId = null;
+        SelectedThread = null; // Limpia el chat al buscar
         _mobileShowChat = false;
         await LoadThreadsAsync();
     }
