@@ -21,9 +21,13 @@ namespace crmchapultepec.data.Repositories.CRM
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _cfg;
         
-        public CrmInboxRepository(IDbContextFactory<CrmInboxDbContext> dbFactory)
+        public CrmInboxRepository(IDbContextFactory<CrmInboxDbContext> dbFactory,
+                                HttpClient httpClient,
+                                IConfiguration cfg)
         {
             _dbFactory = dbFactory;
+            _httpClient = httpClient;
+            _cfg = cfg;
         }
 
         // Usuario actual simulado (o inyectado si tienes Auth)
