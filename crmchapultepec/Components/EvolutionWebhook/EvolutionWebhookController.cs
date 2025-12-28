@@ -289,24 +289,29 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 string? finalPhone = null;
                 string? finalLid = null;
 
-                // 1. Si el JID principal es un número real (@s.whatsapp.net)
-                if (remoteJid != null && remoteJid.Contains("@s.whatsapp.net"))
+                if (remoteJid != null)
                 {
-                    finalPhone = remoteJid.Replace("@s.whatsapp.net", "").Replace("@c.us", "");
-                }
-                // 2. Si el JID principal es un LID (@lid) de Facebook Ads
-                else if (remoteJid != null && remoteJid.Contains("@lid"))
-                {
-                    finalLid = remoteJid;
-                    // Intentamos ver si Evolution nos envió el número real oculto en senderPn
-                    if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
+                    if (remoteJid.Contains("@s.whatsapp.net"))
                     {
-                        finalPhone = senderPn.Replace("@s.whatsapp.net", "");
+                        finalPhone = remoteJid.Replace("@s.whatsapp.net", "").Replace("@c.us", "");
+                    }
+                    else if (remoteJid.Contains("@lid"))
+                    {
+                        //  REGLA DE ORO: Si es LID, NO es teléfono.
+                        finalLid = remoteJid;
+
+                        // Solo si Evolution nos da el senderPn, tenemos el teléfono real
+                        if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
+                        {
+                            finalPhone = senderPn.Replace("@s.whatsapp.net", "");
+                        }
                     }
                 }
 
-                // Definimos el ID del hilo: Prioridad al teléfono, si no, el LID
-                var threadId = !string.IsNullOrEmpty(finalPhone) ? $"wa:{finalPhone}" : $"wa:{finalLid}";
+                // El ThreadId debe ser amigable: si no hay teléfono, usamos el LID literal
+                var threadId = !string.IsNullOrEmpty(finalPhone)
+                               ? $"wa:{finalPhone}"
+                               : $"wa:lid:{finalLid?.Replace("@lid", "")}";
 
                 return new IncomingEvolutionEnvelope
                 {
@@ -853,23 +858,30 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 return thread;
             }
 
+            // CREACIÓN DE HILO NUEVO
+            bool isLidOnly = string.IsNullOrEmpty(snap.CustomerPhone) && !string.IsNullOrEmpty(snap.CustomerLid);
+
             thread = new CrmThread
             {
                 ThreadId = snap.ThreadId,
                 BusinessAccountId = snap.BusinessAccountId,
                 Channel = 1, // WhatsApp
-                ThreadKey = snap.CustomerPhone,
-                CustomerDisplayName = string.IsNullOrEmpty(snap.CustomerDisplayName) && !string.IsNullOrEmpty(snap.CustomerLid)
-                              ? "Prospecto Ads" : snap.CustomerDisplayName,
-                CustomerPhone = snap.CustomerPhone,
+                // Estos campos no deben tener el LID si quieres que la DB esté limpia
+                ThreadKey = isLidOnly ? snap.CustomerLid : snap.CustomerPhone,
+                MainParticipant = isLidOnly ? snap.CustomerLid : snap.CustomerPhone,
+                CustomerDisplayName = isLidOnly ? "Prospecto de Anuncio" : snap.CustomerDisplayName,
+                // 🚩 CAMPOS LIMPIOS
+                CustomerPhone = isLidOnly ? null : snap.CustomerPhone,
+                CustomerLid = snap.CustomerLid,
+
                 CustomerPlatformId = snap.CustomerPhone,
-                CustomerLid = snap.CustomerLid, //  Guardamos el LID
+              
                 CreatedUtc = snap.CreatedAtUtc,
                 LastMessageUtc = snap.CreatedAtUtc,
                 LastMessagePreview = snap.TextPreview,
                 UnreadCount = snap.DirectionIn ? 1 : 0,
-                Status = 0,
-                MainParticipant = snap.CustomerPhone
+                Status = 0
+                
             };
 
             db.CrmThreads.Add(thread);
