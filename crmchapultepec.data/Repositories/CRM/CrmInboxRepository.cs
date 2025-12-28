@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using static crmchapultepec.entities.EvolutionWebhook.EvolutionSendDto;
@@ -234,7 +235,8 @@ namespace crmchapultepec.data.Repositories.CRM
                 Console.WriteLine($"[CRM] Respuesta Raw de Evolution: {rawJsonResponse}");
 
                 var evolutionResult = await response.Content.ReadFromJsonAsync<EvolutionSendResponse>(cancellationToken: ct);
-                
+
+                var rawHash = ComputeSha256(rawJsonResponse);
 
                 // 3. LOGICA DE FECHAS (MEXICO)
                 TimeZoneInfo mexicoZone;
@@ -254,7 +256,8 @@ namespace crmchapultepec.data.Repositories.CRM
                     CreatedUtc = nowMexico,
                     MessageKind = 0,
                     ExternalId = evolutionResult?.data?.key?.id,
-                    RawPayload = "{}"
+                    RawPayload = rawJsonResponse,
+                    RawHash = rawHash // AQUÍ ASIGNAMOS EL HASH CALCULADO
                 };
 
                 db.CrmMessages.Add(msg);
@@ -314,7 +317,12 @@ namespace crmchapultepec.data.Repositories.CRM
             return rows;
         }
 
-
+        private static string ComputeSha256(string raw)
+        {
+            using var sha = SHA256.Create();
+            var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
+            return Convert.ToHexString(bytes);
+        }
 
     }
 }

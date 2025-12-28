@@ -12,6 +12,8 @@ namespace crmchapultepec.entities.EvolutionWebhook
         {
             // El campo "data" contiene la información del mensaje enviado
             public EvolutionResponseData? data { get; set; }
+            public EvolutionKey? key { get; set; }
+            public string? status { get; set; }
         }
 
         public class EvolutionResponseData
