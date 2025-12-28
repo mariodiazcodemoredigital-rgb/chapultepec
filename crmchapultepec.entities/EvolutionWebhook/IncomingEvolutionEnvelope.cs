@@ -33,6 +33,7 @@ namespace crmchapultepec.entities.EvolutionWebhook
         public int UnreadCount { get; set; } = 1;
         public int Status { get; set; } = 0; // pendiente
         public string? AssignedTo { get; set; }
+        public string? CustomerLid { get; set; }
 
         // 🔹 Auditoría
         public string RawPayloadJson { get; set; } = default!;

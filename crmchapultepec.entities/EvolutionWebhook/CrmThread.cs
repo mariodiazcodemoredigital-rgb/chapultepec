@@ -53,6 +53,7 @@ namespace crmchapultepec.entities.EvolutionWebhook
         public string? AssignedTo { get; set; }
 
         public string? MainParticipant { get; set; }
+        public string? CustomerLid { get; set; } // Nuevo campo
 
         // =========================
         // Navegación

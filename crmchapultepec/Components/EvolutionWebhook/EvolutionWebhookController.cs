@@ -285,30 +285,34 @@ namespace crmchapultepec.Components.EvolutionWebhook
                         messageText = t.GetString();
                 }
 
-                // 2. LÓGICA DE EXTRACCIÓN DEL NÚMERO (Tu validación)
-                // Buscamos en orden de prioridad el que contenga "@s.whatsapp.net"
-                string? targetJid = null;
+                // --- LÓGICA DE UNIFICACIÓN DE LID ---
+                string? finalPhone = null;
+                string? finalLid = null;
 
+                // 1. Si el JID principal es un número real (@s.whatsapp.net)
                 if (remoteJid != null && remoteJid.Contains("@s.whatsapp.net"))
-                    targetJid = remoteJid;
-                else if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
-                    targetJid = senderPn;
-                else
-                    targetJid = remoteJid; // Fallback al que sea que tengamos (podría ser el @lid)
+                {
+                    finalPhone = remoteJid.Replace("@s.whatsapp.net", "").Replace("@c.us", "");
+                }
+                // 2. Si el JID principal es un LID (@lid) de Facebook Ads
+                else if (remoteJid != null && remoteJid.Contains("@lid"))
+                {
+                    finalLid = remoteJid;
+                    // Intentamos ver si Evolution nos envió el número real oculto en senderPn
+                    if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
+                    {
+                        finalPhone = senderPn.Replace("@s.whatsapp.net", "");
+                    }
+                }
 
-                // Limpiar para obtener solo los dígitos
-                var phone = targetJid?
-                    .Replace("@s.whatsapp.net", "")
-                    .Replace("@lid", "")
-                    .Replace("@c.us", "");
-
-                var threadId = $"wa:{phone}";
+                // Definimos el ID del hilo: Prioridad al teléfono, si no, el LID
+                var threadId = !string.IsNullOrEmpty(finalPhone) ? $"wa:{finalPhone}" : $"wa:{finalLid}";
 
                 return new IncomingEvolutionEnvelope
                 {
                     ThreadId = threadId,
                     BusinessAccountId = root.GetProperty("instance").GetString() ?? "evolution",
-                    CustomerPhone = phone,
+                    CustomerPhone = finalPhone,
                     CustomerDisplayName = pushName,
                     CustomerPlatformId = remoteJid,
                     Text = messageText,
@@ -317,7 +321,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     ExternalTimestamp = timestamp,
                     ExternalMessageId = externalMessageId,
                     UnreadCount = !fromMe ? 1 : 0,
-                    RawPayloadJson = rawBody
+                    RawPayloadJson = rawBody,
+                    CustomerLid = finalLid
                 };
             }
             catch (Exception ex)
@@ -814,20 +819,38 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
             await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-            var thread = await db.CrmThreads
-                .FirstOrDefaultAsync(t => t.ThreadId == snap.ThreadId, ct);
+            //var thread = await db.CrmThreads
+            //    .FirstOrDefaultAsync(t => t.ThreadId == snap.ThreadId, ct);
+
+            //BUSQUEDA INTELIGENTE:
+            // Buscamos un hilo que coincida con el Telefono O con el LID
+            var thread = await db.CrmThreads.FirstOrDefaultAsync(t =>
+            (snap.CustomerPhone != null && t.CustomerPhone == snap.CustomerPhone) ||
+            (snap.CustomerLid != null && t.CustomerLid == snap.CustomerLid), ct);
 
             if (thread != null)
             {
+                // UNIFICACIÓN: Si el hilo se encontró por LID pero ahora ya tenemos el teléfono real
+                if (string.IsNullOrEmpty(thread.CustomerPhone) && !string.IsNullOrEmpty(snap.CustomerPhone))
+                {
+                    thread.CustomerPhone = snap.CustomerPhone;
+                    thread.ThreadKey = snap.CustomerPhone;
+                    // Opcional: Actualizar el ThreadId si quieres que deje de ser "wa:lid:..."
+                    // thread.ThreadId = $"wa:{snap.CustomerPhone}"; 
+                }
+
+                // Si el mensaje trae un LID nuevo para un teléfono que ya conocíamos, lo guardamos
+                if (string.IsNullOrEmpty(thread.CustomerLid) && !string.IsNullOrEmpty(snap.CustomerLid))
+                {
+                    thread.CustomerLid = snap.CustomerLid;
+                }
+
                 thread.LastMessageUtc = snap.CreatedAtUtc;
                 thread.LastMessagePreview = snap.TextPreview;
-
-                if (snap.DirectionIn)
-                    thread.UnreadCount += 1;
+                if (snap.DirectionIn) thread.UnreadCount += 1;
 
                 await db.SaveChangesAsync();
                 return thread;
-    
             }
 
             thread = new CrmThread
@@ -836,9 +859,11 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 BusinessAccountId = snap.BusinessAccountId,
                 Channel = 1, // WhatsApp
                 ThreadKey = snap.CustomerPhone,
-                CustomerDisplayName = snap.CustomerDisplayName,
+                CustomerDisplayName = string.IsNullOrEmpty(snap.CustomerDisplayName) && !string.IsNullOrEmpty(snap.CustomerLid)
+                              ? "Prospecto Ads" : snap.CustomerDisplayName,
                 CustomerPhone = snap.CustomerPhone,
                 CustomerPlatformId = snap.CustomerPhone,
+                CustomerLid = snap.CustomerLid, //  Guardamos el LID
                 CreatedUtc = snap.CreatedAtUtc,
                 LastMessageUtc = snap.CreatedAtUtc,
                 LastMessagePreview = snap.TextPreview,

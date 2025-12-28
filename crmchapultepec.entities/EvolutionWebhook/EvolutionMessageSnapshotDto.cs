@@ -45,7 +45,7 @@ namespace crmchapultepec.entities.EvolutionWebhook
         public int? PageCount { get; set; }
         public string? ThumbnailBase64 { get; set; }
 
-
+        public string? CustomerLid { get; set; }
 
     }
 

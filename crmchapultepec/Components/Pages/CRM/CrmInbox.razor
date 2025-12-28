@@ -62,7 +62,7 @@
     private bool _mobileShowChat = false;
     private string ContainerClass => $"crm-inbox {(_mobileShowChat ? "crm-inbox--mobile-chat" : "crm-inbox--mobile-list")}";
 
-    private string CurrentUser = "you";
+    private string CurrentUser { get; set; } = "Sistema";
     private HubConnection? hubConnection;
 
   
