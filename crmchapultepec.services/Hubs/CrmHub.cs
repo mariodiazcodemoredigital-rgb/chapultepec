@@ -22,5 +22,13 @@ namespace crmchapultepec.services.Hubs
                 Console.WriteLine($"Cliente {Context.ConnectionId} unido al grupo: {businessAccountId}");
             }
         }
+
+        // Nuevo método para recibir mensajes enviados desde el CRM
+        public async Task NewMessageSent(string groupName, object message)
+        {
+            // Retransmitir a todos en el grupo (incluyendo otros agentes)
+            // excepto al que lo envió (porque él ya lo refrescó localmente)
+            await Clients.OthersInGroup(groupName).SendAsync("NewMessage", message);
+        }
     }
 }

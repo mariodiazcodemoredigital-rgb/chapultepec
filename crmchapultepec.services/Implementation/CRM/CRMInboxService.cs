@@ -42,7 +42,7 @@ namespace crmchapultepec.services.Implementation.CRM
             return _crminboxRepository.GetThreadByIdAsync(threadId, ct);
         }
 
-        public Task<bool> AssignAsync(string threadId, string agentUser, CancellationToken ct = default)
+        public Task<bool> AssignAsync(string threadId, string? agentUser, CancellationToken ct = default)
         {
             return _crminboxRepository.AssignAsync(threadId, agentUser, ct);
         }
@@ -52,7 +52,7 @@ namespace crmchapultepec.services.Implementation.CRM
             return _crminboxRepository.MarkReadAsync(threadId, ct);
         }
 
-        public Task<bool> AppendAgentMessageAsync(string threadId, string text, string senderName, CancellationToken ct = default)
+        public Task<CrmMessage?> AppendAgentMessageAsync(string threadId, string text, string senderName, CancellationToken ct = default)
         {
             return _crminboxRepository.AppendAgentMessageAsync(threadId, text, senderName, ct);
         }

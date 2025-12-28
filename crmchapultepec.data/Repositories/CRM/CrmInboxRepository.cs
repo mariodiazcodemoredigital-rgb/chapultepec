@@ -2,17 +2,24 @@
 using crmchapultepec.entities.Entities.CRM;
 using crmchapultepec.entities.EvolutionWebhook;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text;
 using System.Threading.Tasks;
+using static crmchapultepec.entities.EvolutionWebhook.EvolutionSendDto;
 
 namespace crmchapultepec.data.Repositories.CRM
 {
     public class CrmInboxRepository
     {
         private readonly IDbContextFactory<CrmInboxDbContext> _dbFactory;
+        private readonly HttpClient _httpClient;
+        private readonly IConfiguration _cfg;
+        
         public CrmInboxRepository(IDbContextFactory<CrmInboxDbContext> dbFactory)
         {
             _dbFactory = dbFactory;
@@ -122,7 +129,7 @@ namespace crmchapultepec.data.Repositories.CRM
         // ---------------------------------------------------------
         // 4. ASIGNAR AGENTE
         // ---------------------------------------------------------
-        public async Task<bool> AssignAsync(string threadId, string agentUser, CancellationToken ct = default)
+        public async Task<bool> AssignAsync(string threadId, string? agentUser, CancellationToken ct = default)
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
@@ -159,41 +166,71 @@ namespace crmchapultepec.data.Repositories.CRM
         // ---------------------------------------------------------
         // 6. ENVIAR MENSAJE (AGENTE -> CLIENTE)
         // ---------------------------------------------------------
-        public async Task<bool> AppendAgentMessageAsync(string threadId, string text, string senderName, CancellationToken ct = default)
+        public async Task<CrmMessage?> AppendAgentMessageAsync(string threadId, string text, string senderName, CancellationToken ct = default)
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-            // 1. Buscamos el Hilo para obtener su ID numérico (PK) y validar
             var thread = await db.CrmThreads.FirstOrDefaultAsync(t => t.ThreadId == threadId, ct);
-            if (thread == null) return false;
-
-            var now = DateTime.UtcNow;
-
-            // 2. Creamos el mensaje de SALIDA
-            var msg = new CrmMessage
+            if (thread == null) return null;
+            try
             {
-                ThreadRefId = thread.Id, // FK
-                Sender = senderName ?? CurrentUser,
-                DisplayName = senderName ?? CurrentUser,
-                Text = text,
-                DirectionIn = false, // FALSE = Mensaje enviado por Agente/Sistema
-                TimestampUtc = now,
-                CreatedUtc = now,
-                MessageKind = 0, // Text
-                RawPayload = "{}" // Payload vacío para mensajes internos
-            };
+                // 1. OBTENER CONFIGURACIÓN DE EVOLUTION
+                var apiUrl = _cfg["Evolution:ApiUrl"];
+                var apiKey = _cfg["Evolution:ApiKey"];
+                var instance = _cfg["Evolution:InstanceName"];
 
-            db.CrmMessages.Add(msg);
+                // 2. ENVIAR A EVOLUTION API (WHATSAPP REAL)
+                _httpClient.DefaultRequestHeaders.Clear();
+                _httpClient.DefaultRequestHeaders.Add("apikey", apiKey);
 
-            // 3. Actualizamos el resumen del Hilo
-            thread.LastMessageUtc = now;
-            thread.LastMessagePreview = text;
-            // No aumentamos UnreadCount porque es mensaje nuestro (leído implícitamente)
+                var payload = new
+                {
+                    number = thread.CustomerPhone,
+                    text = text,
+                    delay = 1200,
+                    linkPreview = true
+                };
 
-            await db.SaveChangesAsync(ct);
+                var response = await _httpClient.PostAsJsonAsync($"{apiUrl}/message/sendText/{instance}", payload, ct);
 
-            NotifyChanged();
-            return true;
+                if (!response.IsSuccessStatusCode) return null;
+
+                var evolutionResult = await response.Content.ReadFromJsonAsync<EvolutionSendResponse>(cancellationToken: ct);
+
+                // 3. LOGICA DE FECHAS (MEXICO)
+                TimeZoneInfo mexicoZone;
+                try { mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time (Mexico)"); }
+                catch { mexicoZone = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City"); }
+                var nowMexico = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, mexicoZone);
+
+                // 4. GUARDAR EN DB LOCAL
+                var msg = new CrmMessage
+                {
+                    ThreadRefId = thread.Id,
+                    Sender = senderName ?? CurrentUser,
+                    DisplayName = senderName ?? CurrentUser,
+                    Text = text,
+                    DirectionIn = false,
+                    TimestampUtc = nowMexico,
+                    CreatedUtc = nowMexico,
+                    MessageKind = 0,
+                    ExternalId = evolutionResult?.data?.key?.id,
+                    RawPayload = "{}"
+                };
+
+                db.CrmMessages.Add(msg);
+                thread.LastMessageUtc = nowMexico;
+                thread.LastMessagePreview = text;
+
+                await db.SaveChangesAsync(ct);         
+
+                NotifyChanged();
+                return msg;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
 

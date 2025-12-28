@@ -23,11 +23,11 @@ namespace crmchapultepec.services.Interfaces.CRM
         Task<CrmThread?> GetThreadAsync(string threadId, CancellationToken ct = default);
 
         // Acciones
-        Task<bool> AssignAsync(string threadId, string agentUser, CancellationToken ct = default);
+        Task<bool> AssignAsync(string threadId, string? agentUser, CancellationToken ct = default);
         Task MarkReadAsync(string threadId, CancellationToken ct = default);
 
         // Enviar mensaje (Agente)
-        Task<bool> AppendAgentMessageAsync(string threadId, string text, string senderName, CancellationToken ct = default);
+        Task<CrmMessage?> AppendAgentMessageAsync(string threadId, string text, string senderName, CancellationToken ct = default);
 
         // Guardar/Editar contacto
         Task<int> UpsertContactAsync(int channel, string businessAccountId, string displayName, string? email, string? company, string? phone, string? platformId, CancellationToken ct = default);

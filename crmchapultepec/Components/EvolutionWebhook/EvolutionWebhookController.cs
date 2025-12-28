@@ -71,8 +71,6 @@ namespace crmchapultepec.Components.EvolutionWebhook
             return Ok(medias);
         }
 
-
-
         [HttpGet("view-sticker/{messageId}")]
         public async Task<IActionResult> ViewSticker(int messageId, CancellationToken ct)
         {
@@ -87,7 +85,6 @@ namespace crmchapultepec.Components.EvolutionWebhook
             // 3. Retornar como imagen WebP para que el navegador la pinte
             return File(bytes, "image/webp");
         }
-
 
         // Endpoint para descargar/desencriptar un archivo por Id
         [HttpGet("download/{id}")]
@@ -329,126 +326,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 return null;
             }
         }
-
-        private IncomingMessageDto? MapEvolutionToIncoming(string rawBody)
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(rawBody);
-                var root = doc.RootElement;
-
-                // Evolution trae el objeto bajo `data` (según tu log)
-                JsonElement dataElem;
-                if (root.TryGetProperty("data", out var d))
-                    dataElem = d;
-                else
-                    dataElem = root; // fallback (por si ya es el message)
-
-                // Buscar keys
-                string? remoteJid = null;
-                string? participant = null;
-                string? instance = null;
-                string? messageText = null;
-                long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                bool directionIn = true;
-                string? pushName = null;
-
-                string? externalMessageId = null;
-                bool fromMe = false;
-
-                string? mediaUrl = null;
-                string? mediaMime = null;
-                
-
-                if (dataElem.TryGetProperty("key", out var keyElem))
-                {
-                    if (keyElem.TryGetProperty("remoteJid", out var rj)) 
-                        remoteJid = rj.GetString();
-                    if (keyElem.TryGetProperty("id", out var mid))
-                        externalMessageId = mid.GetString();
-                    if (keyElem.TryGetProperty("participant", out var p)) 
-                        participant = p.GetString();
-                    if (keyElem.TryGetProperty("fromMe", out var fm))
-                        fromMe = fm.GetBoolean();
-                }
-
-                if (root.TryGetProperty("instance", out var inst)) instance = inst.GetString();
-                if (root.TryGetProperty("pushName", out var pn)) pushName = pn.GetString();
-
-                // mensaje: puede estar en data.message.conversation o data.message.extendedTextMessage.text, etc.
-                if (dataElem.TryGetProperty("message", out var msgElem))
-                {
-                    if (msgElem.TryGetProperty("conversation", out var conv))
-                        messageText = conv.GetString();
-                    else if (msgElem.TryGetProperty("extendedTextMessage", out var ext) && ext.TryGetProperty("text", out var extTxt))
-                        messageText = extTxt.GetString();
-                    else
-                    {
-                        // Buscar cualquier primer string value within message
-                        foreach (var prop in msgElem.EnumerateObject())
-                        {
-                            if (prop.Value.ValueKind == JsonValueKind.String)
-                            {
-                                messageText = prop.Value.GetString();
-                                break;
-                            }
-                        }
-                    }
-
-                    //if (msgElem.TryGetProperty("timestamp", out var ts) && ts.TryGetInt64(out var tsv))
-                    //    timestamp = tsv;
-                    if (dataElem.TryGetProperty("messageTimestamp", out var mts) && mts.TryGetInt64(out var mtsv))
-                    {
-                        timestamp = mtsv;
-                    }
-
-                    if (msgElem.TryGetProperty("imageMessage", out var img))
-                    {
-                        mediaUrl = img.GetProperty("url").GetString();
-                        mediaMime = img.GetProperty("mimetype").GetString();
-                    }
-                    else if (msgElem.TryGetProperty("documentMessage", out var docMsg))
-                    {
-                        mediaUrl = docMsg.GetProperty("url").GetString();
-                        mediaMime = docMsg.GetProperty("mimetype").GetString();
-                    }
-
-
-                }
-
-                // sender: en varios logs aparece "sender" separado del key.remoteJid
-                string? sender = null;
-                if (root.TryGetProperty("sender", out var s)) sender = s.GetString();
-                if (string.IsNullOrEmpty(sender) && !string.IsNullOrEmpty(remoteJid))
-                    sender = remoteJid;
-
-                // Build a threadId similar to how you used before, fallback to remoteJid
-                var threadId = $"{instance ?? "evolution"}:{/* businessAccountId? */ instance ?? "unknown"}:{remoteJid ?? sender ?? "unknown"}";
-
-                var incoming = new IncomingMessageDto(
-                    threadId: threadId,
-                    businessAccountId: instance ?? "evolution",
-                    sender: sender ?? remoteJid ?? "unknown",
-                    displayName: pushName ?? "",
-                    text: messageText ?? "",
-                    timestamp: timestamp,
-                    directionIn = !fromMe,
-                    ai: null,
-                    action: "initial",
-                    reason: "incoming_from_evolution",
-                    title: (pushName ?? sender)?.Split(' ').FirstOrDefault() ?? "Nuevo"
-                );
-
-                return incoming;
-            }
-            catch (Exception ex)
-            {
-                _log.LogWarning(ex, "Failed to map Evolution payload to IncomingMessageDto");
-                return null;
-            }
-        }
-
-
+              
         // Helpers
         private static string ComputeHmacSha256(string secret, string payload)
         {

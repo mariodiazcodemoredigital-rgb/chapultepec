@@ -67,9 +67,17 @@ else
             {
                 var isMine = !m.DirectionIn;
                 var rowClass = isMine ? "crm-inbox__msg-row crm-inbox__msg-row--right" : "crm-inbox__msg-row";
-                var bubbleClass = isMine ? "crm-inbox__bubble crm-inbox__bubble--out" : "crm-inbox__bubble crm-inbox__bubble--in";
+                @* var bubbleClass = isMine ? "crm-inbox__bubble crm-inbox__bubble--out" : "crm-inbox__bubble crm-inbox__bubble--in"; *@
+
                 // Si es sticker, quitamos la clase de la burbuja para que no tenga fondo/borde
                 var isSticker = (MessageKind)m.MessageKind == MessageKind.Sticker;
+
+                var bubbleClass = isSticker
+                ? (isMine ? "crm-inbox__bubble--sticker-out" : "crm-inbox__bubble--sticker-in")
+                : (isMine ? "crm-inbox__bubble crm-inbox__bubble--out" : "crm-inbox__bubble crm-inbox__bubble--in");
+
+                
+                
 
                 <div class="@rowClass">
                     @if (!isMine)
@@ -184,6 +192,13 @@ else
             </div>
 
             <div class="modal__footer">
+                @* Nuevo botón para quitar asignación *@
+                @if (!string.IsNullOrWhiteSpace(Thread.AssignedTo))
+                {
+                    <button class="btn btn--danger-outline" @onclick="Unassign" style="margin-right: auto;">
+                        Quitar asignación
+                    </button>
+                }
                 <button class="btn btn--secondary" @onclick="CloseAssignModal">Cancelar</button>
                 <button class="btn btn--primary" @onclick="ConfirmAssign"
                         disabled="@(selectedUsuarioId == null)">
@@ -416,6 +431,31 @@ else
 
         showAssignModal = false;
         StateHasChanged();
+    }
+
+    private async Task Unassign()
+    {
+        if (Thread is null) return;
+
+        try
+        {
+            // 1. Llamamos al servicio pasando null para limpiar la columna AssignedTo
+            await Inbox.AssignAsync(Thread.ThreadId, null);
+
+            // 2. Actualizamos el estado local del hilo
+            Thread.AssignedTo = null;
+
+            // 3. Opcional: Si tienes una lista de hilos en memoria en este componente
+            // o quieres que se refresque el nombre, puedes limpiar la selección.
+            selectedUsuarioId = null;
+
+            CloseAssignModal();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al quitar la asignación: {ex.Message}");
+        }
     }
 
     private string ResolveAssigneeName(string? assigned)

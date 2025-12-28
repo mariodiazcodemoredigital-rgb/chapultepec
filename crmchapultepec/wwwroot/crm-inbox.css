@@ -2320,3 +2320,50 @@ btn.btn-brand.btn-brand-primary:hover,
     right: auto;
     left: 8px;
 }
+
+/* Clase base para el contenedor del sticker */
+.crm-inbox__bubble--sticker-in,
+.crm-inbox__bubble--sticker-out {
+    background: transparent !important; /* Quitamos el fondo de la burbuja */
+    border: none !important; /* Quitamos bordes */
+    box-shadow: none !important; /* Quitamos sombras */
+    padding: 0 !important; /* El sticker no necesita padding interno */
+    display: flex;
+    max-width: 150px; /* Tamaño máximo del sticker */
+}
+
+/* Alineación específica */
+.crm-inbox__bubble--sticker-in {
+    justify-content: flex-start;
+    margin-left: 4px;
+}
+
+.crm-inbox__bubble--sticker-out {
+    justify-content: flex-end;
+    margin-right: 4px;
+}
+
+/* La imagen del sticker */
+.chat-sticker-img {
+    width: 150px;
+    height: 150px;
+    object-fit: contain;
+    pointer-events: none; /* Para que no se pueda arrastrar por error */
+    border-radius: 8px; /* Opcional: un redondeado suave si el sticker tiene fondo blanco */
+}
+
+
+.btn--danger-outline {
+    background: transparent;
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+    .btn--danger-outline:hover {
+        background: #dc3545;
+        color: white;
+    }
