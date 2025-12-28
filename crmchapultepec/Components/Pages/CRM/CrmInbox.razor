@@ -275,12 +275,35 @@
     {
         if (SelectedThread is null || string.IsNullOrWhiteSpace(text)) return;
 
-        // ✅ USAMOS EL MÉTODO NUEVO SIMPLIFICADO DEL REPOSITORIO
-        await Inbox.AppendAgentMessageAsync(SelectedThread.ThreadId, text, CurrentUser);
+        // 1. Ejecutar el guardado y envío real
+        var nuevoMsg = await Inbox.AppendAgentMessageAsync(SelectedThread.ThreadId, text, CurrentUser);
 
-        // Recargamos el hilo para ver el mensaje enviado inmediatamente
-        SelectedThread = await Inbox.GetThreadAsync(SelectedThread.ThreadId);
-        StateHasChanged();
+        if (nuevoMsg != null)
+        {
+            // 2. Notificar vía SignalR a otros agentes
+            // Usamos el nombre de la instancia como nombre del grupo
+            if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+            {
+                await hubConnection.InvokeAsync("NewMessageSent", "ChapultepecEvo", new
+                {
+                    ThreadId = SelectedThread.ThreadId,
+                    Text = nuevoMsg.Text,
+                    Sender = nuevoMsg.Sender,
+                    DirectionIn = false,
+                    CreatedUtc = nuevoMsg.TimestampUtc
+                });
+            }
+
+            // 3. Refrescar el chat actual localmente para ver nuestra burbuja
+            // Esto hará que el ChatView se actualice de inmediato
+            SelectedThread = await Inbox.GetThreadAsync(SelectedThread.ThreadId);
+            StateHasChanged();
+        }
+        else
+        {
+            // Opcional: Mostrar una alerta de que el mensaje no salió
+            Console.WriteLine("Error: El mensaje no pudo enviarse a través de Evolution.");
+        }
     }
 
     private Task BackToList()

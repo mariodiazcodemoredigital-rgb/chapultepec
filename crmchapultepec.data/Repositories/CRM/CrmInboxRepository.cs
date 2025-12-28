@@ -2,6 +2,7 @@
 using crmchapultepec.entities.Entities.CRM;
 using crmchapultepec.entities.EvolutionWebhook;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
@@ -168,16 +169,35 @@ namespace crmchapultepec.data.Repositories.CRM
         // ---------------------------------------------------------
         public async Task<CrmMessage?> AppendAgentMessageAsync(string threadId, string text, string senderName, CancellationToken ct = default)
         {
+            Console.WriteLine($"[CRM] Iniciando envío para Thread: {threadId}");
+
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
             var thread = await db.CrmThreads.FirstOrDefaultAsync(t => t.ThreadId == threadId, ct);
-            if (thread == null) return null;
+            if (thread == null)
+            {
+                Console.WriteLine($"[CRM] Error: No se encontró el ThreadId {threadId} en la base de datos.");
+                return null;
+            }
+
+           
+
             try
             {
                 // 1. OBTENER CONFIGURACIÓN DE EVOLUTION
-                var apiUrl = _cfg["Evolution:ApiUrl"];
+                var apiUrl = _cfg["Evolution:ApiUrl"]?.TrimEnd('/');
                 var apiKey = _cfg["Evolution:ApiKey"];
                 var instance = _cfg["Evolution:InstanceName"];
+
+                // Log de Configuración (No imprimas el ApiKey completo por seguridad)
+                Console.WriteLine($"[CRM] Config: Url={apiUrl}, Instance={instance}, KeyPresent={!string.IsNullOrEmpty(apiKey)}");
+
+                if (string.IsNullOrEmpty(apiUrl) || string.IsNullOrEmpty(apiKey))
+                {
+                    Console.WriteLine("[CRM] Error: La configuración de Evolution (Url/Key) está incompleta.");
+                    return null;
+                }
+
 
                 // 2. ENVIAR A EVOLUTION API (WHATSAPP REAL)
                 _httpClient.DefaultRequestHeaders.Clear();
@@ -191,11 +211,26 @@ namespace crmchapultepec.data.Repositories.CRM
                     linkPreview = true
                 };
 
+                Console.WriteLine($"[CRM] Enviando POST a: {apiUrl}/message/sendText/{instance} para el número: {thread.CustomerPhone}");
+
                 var response = await _httpClient.PostAsJsonAsync($"{apiUrl}/message/sendText/{instance}", payload, ct);
 
-                if (!response.IsSuccessStatusCode) return null;
+                // LOG DE RESPUESTA HTTP
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync(ct);
+                    Console.WriteLine($"[CRM] ERROR API Evolution. Status: {response.StatusCode}. Detalle: {errorContent}");
+                    return null;
+                }
+
+                Console.WriteLine("[CRM] Evolution aceptó el mensaje. Procesando respuesta...");
+
+                // LEER JSON RAW (A veces el modelo falla si Evolution cambia algo)
+                var rawJsonResponse = await response.Content.ReadAsStringAsync(ct);
+                Console.WriteLine($"[CRM] Respuesta Raw de Evolution: {rawJsonResponse}");
 
                 var evolutionResult = await response.Content.ReadFromJsonAsync<EvolutionSendResponse>(cancellationToken: ct);
+                
 
                 // 3. LOGICA DE FECHAS (MEXICO)
                 TimeZoneInfo mexicoZone;
@@ -222,13 +257,16 @@ namespace crmchapultepec.data.Repositories.CRM
                 thread.LastMessageUtc = nowMexico;
                 thread.LastMessagePreview = text;
 
-                await db.SaveChangesAsync(ct);         
+                await db.SaveChangesAsync(ct);
+                Console.WriteLine($"[CRM] ¡Éxito! Mensaje guardado en DB con Id: {msg.Id}");
 
                 NotifyChanged();
                 return msg;
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"[CRM] EXCEPCIÓN CRÍTICA: {ex.Message}");
+                if (ex.InnerException != null) Console.WriteLine($"[CRM] Inner Exception: {ex.InnerException.Message}");
                 return null;
             }
         }
