@@ -80,7 +80,8 @@ builder.Services.AddScoped<CRMxEquiposUsuariosRepository>();
 builder.Services.AddScoped<CRMxEquiposUsuariosService>();
 
 // --- CRM Inbox ---
-builder.Services.AddScoped<CrmInboxRepository>();
+builder.Services.AddHttpClient<CrmInboxRepository>();
+//builder.Services.AddScoped<CrmInboxRepository>();
 builder.Services.AddScoped<ICRMInboxService, CRMInboxService>();
 builder.Services.AddScoped<CRMInboxService>(); // IMPORTANTE: Registro concreto para las vistas
 
