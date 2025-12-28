@@ -8,6 +8,7 @@
 @inject CRMInboxService Inbox
 @inject NavigationManager Nav
 @implements IAsyncDisposable
+@inject AuthenticationStateProvider AuthStateProvider
 
 @rendermode InteractiveServer
 
@@ -61,13 +62,23 @@
     private bool _mobileShowChat = false;
     private string ContainerClass => $"crm-inbox {(_mobileShowChat ? "crm-inbox--mobile-chat" : "crm-inbox--mobile-list")}";
 
-    private const string CurrentUser = "you";
+    private string CurrentUser = "you";
     private HubConnection? hubConnection;
 
   
 
     protected override async Task OnInitializedAsync()
     {
+        // Obtener el usuario logueado
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity is { IsAuthenticated: true })
+        {
+            // Puedes usar user.Identity.Name o un Claim específico si usas IDs numéricos
+            CurrentUser = user.Identity.Name ?? "Desconocido";
+        }
+
         // 1. Suscribirse al evento de cambios
         Inbox.Changed += OnInboxChanged;
 
