@@ -434,21 +434,26 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     senderPn = spn.GetString();
             }
 
-            //  LÓGICA DE UNIFICACIÓN (Igual a la de MapEvolutionToEnvelope)
-            // Buscamos cuál de los campos contiene el número real (@s.whatsapp.net)
-            string? targetJidForPhone = null;
-            if (remoteJid != null && remoteJid.Contains("@s.whatsapp.net"))
-                targetJidForPhone = remoteJid;
-            else if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
-                targetJidForPhone = senderPn;
-            else
-                targetJidForPhone = remoteJid; // Fallback
+            // --- LÓGICA DE UNIFICACIÓN Y LIMPIEZA ---
+            string? finalPhone = null;
+            string? finalLid = null;
 
-            // Extraer solo el número
-            string? customerPhone = targetJidForPhone?
-                .Replace("@s.whatsapp.net", "")
-                .Replace("@lid", "")
-                .Replace("@c.us", "");
+            if (remoteJid != null)
+            {
+                if (remoteJid.Contains("@s.whatsapp.net"))
+                {
+                    finalPhone = remoteJid.Replace("@s.whatsapp.net", "").Replace("@c.us", "");
+                }
+                else if (remoteJid.Contains("@lid"))
+                {
+                    finalLid = remoteJid;
+                    // Intentar rescatar el teléfono si viene en senderPn
+                    if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
+                    {
+                        finalPhone = senderPn.Replace("@s.whatsapp.net", "");
+                    }
+                }
+            }
 
             TimeZoneInfo mexicoZone;
             try
@@ -482,11 +487,14 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
             //  El ThreadId de auditoría debe ser consistente: wa:numero
             // Antes tenías instance:remoteJid, pero es mejor wa:phone para ligarlo fácil
-            var threadId = $"wa:{customerPhone ?? "unknown"}";
+            // El ThreadId de auditoría ahora sigue la misma regla: wa:tel o wa:lid:id
+            string auditThreadId = !string.IsNullOrEmpty(finalPhone)
+                ? $"wa:{finalPhone}"
+                : (finalLid != null ? $"wa:lid:{finalLid.Replace("@lid", "")}" : "wa:unknown");
 
             var entity = new EvolutionRawPayload
             {
-                ThreadId = threadId,
+                ThreadId = auditThreadId,
                 Source = "evolution",
                 PayloadJson = rawBody,
                 ReceivedUtc = receivedLocal,
@@ -498,7 +506,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 RemoteJid = remoteJid, // Guardamos el original (@lid si es el caso)
                 FromMe = fromMe,
                 Sender = sender,
-                CustomerPhone = customerPhone, // Guardamos el número limpio
+                CustomerPhone = finalPhone, // Guardamos el número limpio
                 CustomerDisplayName = pushName,
                 MessageDateUtc = messageDate,
 
@@ -554,18 +562,28 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     pushName = pn.GetString();
 
                 // 🚩 LÓGICA DE EXTRACCIÓN DE NÚMERO (Validación @s.whatsapp.net)
-                string? targetJidForPhone = null;
-                if (remoteJid.Contains("@s.whatsapp.net"))
-                    targetJidForPhone = remoteJid;
-                else if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
-                    targetJidForPhone = senderPn;
-                else
-                    targetJidForPhone = remoteJid;
+                // 🚩 LÓGICA DE IDENTIDAD (UNIFICADA)
+                string? finalPhone = null;
+                string? finalLid = null;
 
-                var customerPhone = targetJidForPhone?
-                    .Replace("@s.whatsapp.net", "")
-                    .Replace("@lid", "")
-                    .Replace("@c.us", "");
+                if (remoteJid.Contains("@s.whatsapp.net"))
+                {
+                    finalPhone = remoteJid.Replace("@s.whatsapp.net", "").Replace("@c.us", "");
+                }
+                else if (remoteJid.Contains("@lid"))
+                {
+                    finalLid = remoteJid;
+                    // Intentamos rescatar el teléfono real si viene en senderPn
+                    if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
+                    {
+                        finalPhone = senderPn.Replace("@s.whatsapp.net", "");
+                    }
+                }
+
+                // El ThreadId del snapshot debe ser consistente con la búsqueda
+                var threadId = !string.IsNullOrEmpty(finalPhone)
+                    ? $"wa:{finalPhone}"
+                    : $"wa:lid:{finalLid?.Replace("@lid", "")}";
 
                 // =========================
                 // timestamp (string o number)
@@ -776,11 +794,12 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 // =========================
                 return new EvolutionMessageSnapshotDto
                 {
-                    ThreadId = $"{instance}:{targetJidForPhone}",
+                    ThreadId = threadId,
                     BusinessAccountId = instance,
 
                     Sender = senderRoot ?? remoteJid,
-                    CustomerPhone = customerPhone, // 🚩 Número real extraído
+                    CustomerPhone = finalPhone, // 🚩 Número real extraído
+                    CustomerLid = finalLid,
                     CustomerDisplayName = pushName,
                     DirectionIn = !fromMe,
                     MessageKind = messageKind,
