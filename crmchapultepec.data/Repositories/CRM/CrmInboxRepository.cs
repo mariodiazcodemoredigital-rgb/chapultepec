@@ -174,6 +174,7 @@ namespace crmchapultepec.data.Repositories.CRM
         // ---------------------------------------------------------
         public async Task<CrmMessage?> AppendAgentMessageAsync(string threadId, string text, string senderName, CancellationToken ct = default)
         {
+            Console.WriteLine($"[CRM] Nombre Sender: {senderName}");
             Console.WriteLine($"[CRM] Iniciando envío para Thread: {threadId}");
 
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
