@@ -41,7 +41,7 @@
         }
         else
         {
-            <ChatView Thread="@SelectedThread" OnSend="SendMessage" OnAssignToMe="AssignToMe"
+            <ChatView Thread="@SelectedThread" OnSend="SendMessage" OnAssignToMe="AssignToMe" OnAssignUpdated="NotifyAssignChange"
                       ShowBackButton="true" OnBack="BackToList" CurrentUser="@CurrentUser"
                       OnContactUpdated="HandleContactUpdated" />
         }
@@ -97,18 +97,26 @@
                     .WithAutomaticReconnect()
                     .Build();
 
-                hubConnection.On<dynamic>("NewMessage", async (data) =>
+                // Evento 1: Mensajes nuevos (Evolution -> Webhook -> Hub)
+                hubConnection.On<object>("NewMessage", async (data) =>
                 {
                     // Para depurar: verás el aviso en la consola del navegador
                     Console.WriteLine("¡Llegó notificación de SignalR!");
+                    OnInboxChanged();                   
+                });
+
+                // Evento 2: Cambio de asignación (Agente -> Hub -> Otros Agentes)
+                hubConnection.On<object>("ChatAssigned", async (data) =>
+                {
+                    Console.WriteLine("SignalR: Cambio de asignación detectado.");
+                    // Llamamos a tu método de refresco con debounce
                     OnInboxChanged();
-                   // await InvokeAsync(StateHasChanged);
                 });
 
                 await hubConnection.StartAsync();
                 Console.WriteLine("SignalR conectado exitosamente.");
 
-                // 🔴 PASO CLAVE: Unirse al grupo.
+                //  PASO CLAVE: Unirse al grupo.
                 // Aquí debes pasar el ID de tu instancia (ej. "ChapultepecEvo")
                 // Si lo tienes dinámico en el usuario, úsalo. Si no, por ahora hardcode para probar:
                 await hubConnection.InvokeAsync("JoinGroup", "ChapultepecEvo");
@@ -345,5 +353,14 @@
 
         StateHasChanged();
         return Task.CompletedTask;
+    }
+
+    private async Task NotifyAssignChange()
+    {
+        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+        {
+            // Invocamos el método del Hub pasándole el grupo
+            await hubConnection.InvokeAsync("ChatAssigned", "ChapultepecEvo", new { });
+        }
     }
 }

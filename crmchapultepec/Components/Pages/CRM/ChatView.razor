@@ -245,6 +245,7 @@ else
     [Parameter] public bool ShowBackButton { get; set; } = false;
     [Parameter] public EventCallback OnBack { get; set; }
     [Parameter] public string? CurrentUser { get; set; }
+    [Parameter] public EventCallback OnAssignUpdated { get; set; }
 
     public record ContactChangedArgs(string ThreadId, string Name, string? Phone, string? Email, string? Company);
     [Parameter] public EventCallback<ContactChangedArgs> OnContactUpdated { get; set; }
@@ -430,6 +431,10 @@ else
         Thread.AssignedTo = selectedUsuarioId.Value.ToString();
 
         showAssignModal = false;
+
+        // Avisar al componente padre para que notifique a SignalR
+        await OnAssignUpdated.InvokeAsync();
+
         StateHasChanged();
     }
 

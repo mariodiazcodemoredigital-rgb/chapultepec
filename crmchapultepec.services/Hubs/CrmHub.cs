@@ -30,5 +30,11 @@ namespace crmchapultepec.services.Hubs
             // excepto al que lo envió (porque él ya lo refrescó localmente)
             await Clients.OthersInGroup(groupName).SendAsync("NewMessage", message);
         }
+
+        public async Task ChatAssigned(string groupName, object data)
+        {
+            // Reenvía la información a todos los demás en el grupo
+            await Clients.Group(groupName).SendAsync("ChatAssigned", data);
+        }
     }
 }
