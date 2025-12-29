@@ -444,15 +444,20 @@ else
 
         try
         {
+            // Limpiamos en la base de datos
             // 1. Llamamos al servicio pasando null para limpiar la columna AssignedTo
             await Inbox.AssignAsync(Thread.ThreadId, null);
 
+            // Actualizamos localmente
             // 2. Actualizamos el estado local del hilo
             Thread.AssignedTo = null;
 
-            // 3. Opcional: Si tienes una lista de hilos en memoria en este componente
+            // Opcional: Si tienes una lista de hilos en memoria en este componente
             // o quieres que se refresque el nombre, puedes limpiar la selección.
             selectedUsuarioId = null;
+
+            // 3. Notificamos al padre para que SignalR avise a los demás
+            await OnAssignUpdated.InvokeAsync();
 
             CloseAssignModal();
             StateHasChanged();
