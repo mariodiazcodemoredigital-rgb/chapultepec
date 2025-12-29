@@ -561,6 +561,19 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 if (data.TryGetProperty("pushName", out var pn))
                     pushName = pn.GetString();
 
+                // 🚩 DETECCIÓN AVANZADA DE ORIGEN (Prospecto vs Contacto LID)
+                bool isFromAd = false;
+                if (data.TryGetProperty("contextInfo", out var context))
+                {
+                    // Verificamos si Meta marcó esto como un saludo automático de anuncio
+                    if (context.TryGetProperty("automatedGreetingMessageShown", out var autoGreet))
+                        isFromAd = autoGreet.GetBoolean();
+
+                    // Verificamos si existe información de Ad Reply (Facebook/Instagram Ads)
+                    if (!isFromAd && context.TryGetProperty("externalAdReply", out var adReply))
+                        isFromAd = true;
+                }
+
                 // 🚩 LÓGICA DE EXTRACCIÓN DE NÚMERO (Validación @s.whatsapp.net)
                 // 🚩 LÓGICA DE IDENTIDAD (UNIFICADA)
                 string? finalPhone = null;
@@ -573,10 +586,30 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 else if (remoteJid.Contains("@lid"))
                 {
                     finalLid = remoteJid;
-                    // Intentamos rescatar el teléfono real si viene en senderPn
                     if (senderPn != null && senderPn.Contains("@s.whatsapp.net"))
-                    {
                         finalPhone = senderPn.Replace("@s.whatsapp.net", "");
+                }
+
+                // DETERMINACIÓN DEL NOMBRE MOSTRADO
+                // Regla: 
+                // 1. Si es un mensaje saliente (fromMe), el pushName es el tuyo, así que NO lo usamos para el cliente.
+                // 2. Si es entrante y es anuncio -> "Prospecto de Anuncio"
+                // 3. Si es entrante y es LID pero no anuncio -> "Contacto LID (Web/Otro)"
+                // 4. Si tenemos PushName del cliente (cuando es entrante), usamos ese.
+
+                string? computedDisplayName = pushName;
+
+                if (fromMe)
+                {
+                    // No queremos que el chat se llame "Mario Diaz" (tu nombre) solo porque tú iniciaste
+                    computedDisplayName = isFromAd ? "Prospecto de Anuncio" : "Contacto LID (Pendiente)";
+                }
+                else
+                {
+                    // Es un mensaje que VIENE del cliente
+                    if (string.IsNullOrEmpty(pushName))
+                    {
+                        computedDisplayName = isFromAd ? "Prospecto de Anuncio" : "Contacto LID";
                     }
                 }
 
@@ -797,10 +830,10 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     ThreadId = threadId,
                     BusinessAccountId = instance,
 
-                    Sender = senderRoot ?? remoteJid,
-                    CustomerPhone = finalPhone, // 🚩 Número real extraído
+                    Sender = (fromMe && !string.IsNullOrEmpty(senderPn)) ? senderPn : (senderRoot ?? remoteJid),
+                    CustomerPhone = finalPhone, //  Número real extraído
                     CustomerLid = finalLid,
-                    CustomerDisplayName = pushName,
+                    CustomerDisplayName = computedDisplayName, //  Nombre inteligente
                     DirectionIn = !fromMe,
                     MessageKind = messageKind,
                     MessageType = messageType,
@@ -846,29 +879,33 @@ namespace crmchapultepec.Components.EvolutionWebhook
             //var thread = await db.CrmThreads
             //    .FirstOrDefaultAsync(t => t.ThreadId == snap.ThreadId, ct);
 
-            //BUSQUEDA INTELIGENTE:
-            // Buscamos un hilo que coincida con el Telefono O con el LID
+            // 1. BUSQUEDA DUAL: Intentamos encontrar el hilo por LID o por el nuevo JID Real
             var thread = await db.CrmThreads.FirstOrDefaultAsync(t =>
-            (snap.CustomerPhone != null && t.CustomerPhone == snap.CustomerPhone) ||
-            (snap.CustomerLid != null && t.CustomerLid == snap.CustomerLid), ct);
+                (snap.CustomerLid != null && t.CustomerLid == snap.CustomerLid) ||
+                (snap.CustomerPhone != null && t.CustomerPhone == snap.CustomerPhone), ct);
 
             if (thread != null)
             {
-                // UNIFICACIÓN: Si el hilo se encontró por LID pero ahora ya tenemos el teléfono real
+                // 🚩 ESCENARIO DE CONVERSIÓN/UNIFICACIÓN
+                // Si el hilo en DB no tiene teléfono (era solo LID) 
+                // pero el mensaje de ahora SÍ trae un teléfono real (snap.CustomerPhone)
                 if (string.IsNullOrEmpty(thread.CustomerPhone) && !string.IsNullOrEmpty(snap.CustomerPhone))
                 {
+                    // "Promovemos" el hilo de LID a WhatsApp Real
+                    thread.ThreadId = snap.ThreadId;      // wa:lid:xxx -> wa:521xxx
                     thread.CustomerPhone = snap.CustomerPhone;
                     thread.ThreadKey = snap.CustomerPhone;
-                    // Opcional: Actualizar el ThreadId si quieres que deje de ser "wa:lid:..."
-                    // thread.ThreadId = $"wa:{snap.CustomerPhone}"; 
+                    thread.MainParticipant = snap.CustomerPhone;
+                    thread.CustomerPlatformId = snap.CustomerPhone + "@s.whatsapp.net"; // Reconstruimos el JID
+
+                    // Actualizamos el nombre si era el genérico
+                    if (thread.CustomerDisplayName == "Prospecto de Anuncio" || thread.CustomerDisplayName == "Contacto LID")
+                    {
+                        thread.CustomerDisplayName = snap.CustomerDisplayName;
+                    }
                 }
 
-                // Si el mensaje trae un LID nuevo para un teléfono que ya conocíamos, lo guardamos
-                if (string.IsNullOrEmpty(thread.CustomerLid) && !string.IsNullOrEmpty(snap.CustomerLid))
-                {
-                    thread.CustomerLid = snap.CustomerLid;
-                }
-
+                // Actualización normal de mensajes
                 thread.LastMessageUtc = snap.CreatedAtUtc;
                 thread.LastMessagePreview = snap.TextPreview;
                 if (snap.DirectionIn) thread.UnreadCount += 1;
@@ -877,7 +914,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 return thread;
             }
 
-            // CREACIÓN DE HILO NUEVO
+            // 2. CREACIÓN DE HILO NUEVO
+            // Si no se encontró nada, creamos el registro inicial
             bool isLidOnly = string.IsNullOrEmpty(snap.CustomerPhone) && !string.IsNullOrEmpty(snap.CustomerLid);
 
             thread = new CrmThread
@@ -885,16 +923,19 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 ThreadId = snap.ThreadId,
                 BusinessAccountId = snap.BusinessAccountId,
                 Channel = 1, // WhatsApp
-                // Estos campos no deben tener el LID si quieres que la DB esté limpia
-                ThreadKey = isLidOnly ? snap.CustomerLid : snap.CustomerPhone,
-                MainParticipant = isLidOnly ? snap.CustomerLid : snap.CustomerPhone,
-                CustomerDisplayName = isLidOnly ? "Prospecto de Anuncio" : snap.CustomerDisplayName,
+                             // Estos campos no deben tener el LID si quieres que la DB esté limpia
+                ThreadKey = !string.IsNullOrEmpty(snap.CustomerPhone) ? snap.CustomerPhone : snap.CustomerLid,
+                MainParticipant = !string.IsNullOrEmpty(snap.CustomerPhone) ? snap.CustomerPhone : snap.CustomerLid,
+                CustomerDisplayName = snap.CustomerDisplayName,
                 // 🚩 CAMPOS LIMPIOS
-                CustomerPhone = isLidOnly ? null : snap.CustomerPhone,
+                CustomerPhone = snap.CustomerPhone,
                 CustomerLid = snap.CustomerLid,
 
-                CustomerPlatformId = snap.CustomerPhone,
-              
+                // PlatformId: Si hay teléfono usamos el JID estándar, si no, el LID
+                CustomerPlatformId = !string.IsNullOrEmpty(snap.CustomerPhone)
+                             ? snap.CustomerPhone + "@s.whatsapp.net"
+                             : snap.CustomerLid,
+
                 CreatedUtc = snap.CreatedAtUtc,
                 LastMessageUtc = snap.CreatedAtUtc,
                 LastMessagePreview = snap.TextPreview,
