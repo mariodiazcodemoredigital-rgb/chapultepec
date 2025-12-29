@@ -882,11 +882,22 @@ namespace crmchapultepec.Components.EvolutionWebhook
             // 1. BUSQUEDA DUAL: Intentamos encontrar el hilo por LID o por el nuevo JID Real
             var thread = await db.CrmThreads.FirstOrDefaultAsync(t =>
                 (snap.CustomerLid != null && t.CustomerLid == snap.CustomerLid) ||
-                (snap.CustomerPhone != null && t.CustomerPhone == snap.CustomerPhone), ct);
+                (!string.IsNullOrEmpty(snap.CustomerPhone) && t.CustomerPhone == snap.CustomerPhone), ct);
 
             if (thread != null)
             {
-                // 🚩 ESCENARIO DE CONVERSIÓN/UNIFICACIÓN
+                //  REGLA DE ORO: Si ya tenemos el nombre real del cliente (PushName), hay que usarlo.
+                // Solo actualizamos si el nombre en DB es genérico o si el snap trae un nombre nuevo/mejor.
+                bool isGenericName = thread.CustomerDisplayName == "Contacto LID (Pendiente)" ||
+                                     thread.CustomerDisplayName == "Contacto LID" ||
+                                     thread.CustomerDisplayName == "Prospecto de Anuncio";
+
+                if (isGenericName && !string.IsNullOrEmpty(snap.CustomerDisplayName))
+                {
+                    thread.CustomerDisplayName = snap.CustomerDisplayName;
+                }
+
+                //  ESCENARIO DE CONVERSIÓN/UNIFICACIÓN
                 // Si el hilo en DB no tiene teléfono (era solo LID) 
                 // pero el mensaje de ahora SÍ trae un teléfono real (snap.CustomerPhone)
                 if (string.IsNullOrEmpty(thread.CustomerPhone) && !string.IsNullOrEmpty(snap.CustomerPhone))
@@ -898,8 +909,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
                     thread.MainParticipant = snap.CustomerPhone;
                     thread.CustomerPlatformId = snap.CustomerPhone + "@s.whatsapp.net"; // Reconstruimos el JID
 
-                    // Actualizamos el nombre si era el genérico
-                    if (thread.CustomerDisplayName == "Prospecto de Anuncio" || thread.CustomerDisplayName == "Contacto LID")
+                    // Si además trae un nombre, asegurarnos de que lo tome
+                    if (!string.IsNullOrEmpty(snap.CustomerDisplayName))
                     {
                         thread.CustomerDisplayName = snap.CustomerDisplayName;
                     }
