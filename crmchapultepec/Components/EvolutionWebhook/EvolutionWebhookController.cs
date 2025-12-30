@@ -87,23 +87,22 @@ namespace crmchapultepec.Components.EvolutionWebhook
         }
 
         // Endpoint para descargar/desencriptar un archivo por Id
-        [HttpGet("download/{id}")]
-        public async Task<IActionResult> Download(int id, CancellationToken ct)
+        [HttpGet("download/{messageId}")]
+        public async Task<IActionResult> Download(int messageId, CancellationToken ct)
         {
-            var media = await _mediaService.GetByIdAsync(id, ct);
+            var media = await _mediaService.GetByIdAsync(messageId, ct);
             if (media == null) return NotFound();
 
             var bytes = await _mediaService.DecryptMedia(media, ct);
             if (bytes == null) return BadRequest("No se pudo desencriptar el archivo");
-
-            // Si no tienes MediaMime, usar un genérico o inferir por la extensión
-            var mime = media.MediaType switch
+            
+            var mime = media.MediaType?.ToLower() switch
             {
-                "image" => "image/jpeg",
-                "sticker" => "image/webp",
-                "document" => "application/pdf",
-                "audio" => "audio/mpeg",
-                _ => "application/octet-stream"
+                "image" or "imagemessage" => "image/jpeg", //  Añadido imagemessage
+                "sticker" or "stickermessage" => "image/webp",
+                "document" or "documentmessage" => "application/pdf",
+                "audio" or "audiomessage" => "audio/mpeg",
+                _ => "image/jpeg" // Fallback a imagen si es desconocido para intentar renderizar
             };
 
             // Si es imagen o sticker, lo enviamos SIN el nombre del archivo 
@@ -111,6 +110,12 @@ namespace crmchapultepec.Components.EvolutionWebhook
             if (media.MediaType == "image" || media.MediaType == "sticker")
             {
                 return File(bytes, mime);
+            }
+
+            // Si es documento, forzamos que el navegador lo descargue con su nombre original
+            if (media.MediaType?.Contains("document") == true)
+            {
+                return File(bytes, mime, media.FileName ?? "archivo.pdf");
             }
 
             // Para documentos, mantenemos la descarga
@@ -694,18 +699,49 @@ namespace crmchapultepec.Components.EvolutionWebhook
                         {
                             messageKind = MessageKind.Image;
                             mediaType = "image";
-                            var img = message.GetProperty("imageMessage");
-                            mediaUrl = img.GetProperty("url").GetString();
-                            mediaMime = img.GetProperty("mimetype").GetString();
-                            mediaCaption = img.TryGetProperty("caption", out var ic) ? ic.GetString() : null;
-                            mediaKey = img.GetProperty("mediaKey").GetString();
-                            fileSha256 = img.GetProperty("fileSha256").GetString();
-                            fileEncSha256 = img.GetProperty("fileEncSha256").GetString();
-                            directPath = img.GetProperty("directPath").GetString();
-                            mediaKeyTimestamp = img.TryGetProperty("mediaKeyTimestamp", out var mts) ? mts.GetInt64() : null;
-                            fileLength = img.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : null;
-                            thumbnailBase64 = img.TryGetProperty("jpegThumbnail", out var jt) ? jt.GetString() : null;
-                            textPreview = "[Imagen]";
+
+                            // Accedemos al nodo imageMessage
+                            if (!message.TryGetProperty("imageMessage", out var img))
+                            {
+                                _log.LogWarning("Payload marcado como imageMessage pero no se encontró el nodo interno.");
+                                return null;
+                            }
+
+                            // Extraer URLs (Evolution a veces pone la URL de descarga directa aquí)
+                            var rawUrl = img.TryGetProperty("url", out var urlProp) ? urlProp.GetString() : null;
+                            var dPath = img.TryGetProperty("directPath", out var dpProp) ? dpProp.GetString() : null;
+
+                            // Si la URL es de web.whatsapp (caduca rápido), preferimos armar la de mmg con el directPath
+                            if ((string.IsNullOrEmpty(rawUrl) || rawUrl.Contains("web.whatsapp.net")) && !string.IsNullOrEmpty(dPath))
+                                mediaUrl = $"https://mmg.whatsapp.net{dPath}";
+                            else
+                                mediaUrl = rawUrl;
+
+                            // Metadatos para desencriptar (Cruciales)
+                            mediaMime = img.TryGetProperty("mimetype", out var mime) ? mime.GetString() : "image/jpeg";
+                            mediaKey = img.TryGetProperty("mediaKey", out var mk) ? mk.GetString() : null;
+                            fileSha256 = img.TryGetProperty("fileSha256", out var fsh) ? fsh.GetString() : null;
+                            fileEncSha256 = img.TryGetProperty("fileEncSha256", out var feh) ? feh.GetString() : null;
+                            directPath = dPath;
+
+                            // Caption (Si la imagen lleva texto abajo)
+                            mediaCaption = img.TryGetProperty("caption", out var cap) ? cap.GetString() : null;
+
+                            // Thumbnail (Miniatura en Base64 que viene en el JSON)
+                            thumbnailBase64 = img.TryGetProperty("jpegThumbnail", out var thumb) ? thumb.GetString() : null;
+
+                            // Tamaño del archivo
+                            if (img.TryGetProperty("fileLength", out var fl))
+                            {
+                                if (fl.ValueKind == JsonValueKind.String && long.TryParse(fl.GetString(), out var len))
+                                    fileLength = len;
+                                else if (fl.ValueKind == JsonValueKind.Number)
+                                    fileLength = fl.GetInt64();
+                            }
+
+                            // Preview para la lista de chats
+                            textPreview = !string.IsNullOrEmpty(mediaCaption) ? $"📷 {mediaCaption}" : "📷 Foto";
+                            text = mediaCaption; // Guardamos el caption como el texto del mensaje
                             break;
                         }
 
@@ -758,7 +794,11 @@ namespace crmchapultepec.Components.EvolutionWebhook
                         {
                             messageKind = MessageKind.Sticker;
                             mediaType = "sticker";
-                            var stk = message.GetProperty("stickerMessage");
+
+                            // Intentamos obtener el nodo de diferentes formas por si Evolution cambia la estructura
+                            JsonElement stk;
+                            if (message.TryGetProperty("stickerMessage", out var s1)) stk = s1;
+                            else stk = message; // Fallback si el nodo ya es el sticker
 
                             var rawUrl = stk.TryGetProperty("url", out var urlProp) ? urlProp.GetString() : null;
                             var dPath = stk.TryGetProperty("directPath", out var dpProp) ? dpProp.GetString() : null;

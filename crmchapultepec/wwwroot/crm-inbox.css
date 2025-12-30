@@ -1998,6 +1998,8 @@ btn.btn-brand.btn-brand-primary:hover,
     margin-top: 6px;
     white-space: pre-wrap;
     word-wrap: break-word;
+    word-break: break-word;
+    padding: 2px 4px; /* Un poco de respiro para el texto */
 }
 
 /* Miniatura de imagen */
@@ -2367,3 +2369,76 @@ btn.btn-brand.btn-brand-primary:hover,
         background: #dc3545;
         color: white;
     }
+
+
+    .msg-thumb:hover {
+        opacity: 0.9;
+    }
+
+.msg-media {
+    margin-bottom: 4px;
+}
+
+/* Estilo para stickers (sin fondo de burbuja si es necesario) */
+/* Esto quita el fondo y el recuadro blanco/verde de las imágenes y stickers */
+.crm-inbox__bubble--sticker-out,
+.crm-inbox__bubble--sticker-in {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important; /* Crucial para que no se vea un borde blanco */
+    margin-bottom: 4px;
+    display: inline-block;
+}
+
+/* Estilo para la imagen para que se vea como en WhatsApp */
+.msg-thumb {
+    max-width: 250px;
+    max-height: 300px;
+    border-radius: 12px; /* Redondeado de imagen */
+    display: block;
+    object-fit: cover;
+    cursor: pointer;
+}
+
+/* Si la burbuja tiene un "after" o "before" (la colita de la burbuja), hay que quitarlo para stickers/fotos */
+.crm-inbox__bubble--sticker-out::after,
+.crm-inbox__bubble--sticker-in::before {
+    display: none !important;
+}
+
+/* Asegura que la burbuja se ajuste al contenido interno */
+.crm-inbox__bubble {
+    display: inline-block; /* O inline-flex con flex-direction column */
+    max-width: 85%; /* Límite para que no ocupe toda la pantalla */
+    overflow: hidden; /* Para que los bordes redondeados corten la imagen si es necesario */
+    vertical-align: top;
+}
+
+    /* Ajuste específico para cuando hay una imagen dentro de una burbuja con fondo */
+    .crm-inbox__bubble img.msg-thumb {
+        width: 100%; /* Obliga a la imagen a ocupar el ancho de la burbuja */
+        height: auto;
+        display: block;
+        margin-bottom: 8px; /* Espacio entre la imagen y el texto inferior */
+        border-radius: 4px; /* Un redondeo menor dentro de la burbuja se ve mejor */
+    }
+
+/* El texto debajo de la imagen */
+.msg-text {
+    word-break: break-word;
+    padding: 2px 4px; /* Un poco de respiro para el texto */
+}
+
+.msg-audio-container {
+    padding: 5px 0;
+}
+/* Estilo para que el audio de Chrome/Safari no se vea blanco sobre fondo claro */
+audio {
+    filter: sepia(20%) saturate(70%) grayscale(100%) contrast(90%);
+}
+
+.msg-video {
+    display: block;
+    margin-bottom: 5px;
+}

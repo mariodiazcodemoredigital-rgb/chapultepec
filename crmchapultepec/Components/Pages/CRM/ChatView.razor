@@ -72,7 +72,14 @@ else
                 // Si es sticker, quitamos la clase de la burbuja para que no tenga fondo/borde
                 var isSticker = (MessageKind)m.MessageKind == MessageKind.Sticker;
 
-                var bubbleClass = isSticker
+                // Definimos si es imagen pura (sin texto) para quitarle la burbuja
+                var isImage = (MessageKind)m.MessageKind == MessageKind.Image;
+
+                // Definimos si debe ir sin burbuja:
+                // Si es sticker O si es imagen sin texto (caption)
+                bool sinBurbuja = isSticker || (isImage && string.IsNullOrWhiteSpace(m.Text));
+
+                var bubbleClass = sinBurbuja
                 ? (isMine ? "crm-inbox__bubble--sticker-out" : "crm-inbox__bubble--sticker-in")
                 : (isMine ? "crm-inbox__bubble crm-inbox__bubble--out" : "crm-inbox__bubble crm-inbox__bubble--in");
 
@@ -87,44 +94,83 @@ else
                         </div>
                     }
                     <div class="msg">
+
+
                         <div class="@bubbleClass" style="position: relative;">
-                            @* 1. Prioridad: Medias Desencriptados por ID (Stickers e Imágenes locales) *@
+
+                            @* --- 1. STICKERS --- *@
                             @if (isSticker)
                             {
                                 <img src="/api/webhook/evolution/view-sticker/@m.Id"
                                      style="width: 150px; height: 150px; object-fit: contain; pointer-events: none;"
                                      alt="Sticker" />
                             }
+
+                            @* --- 2. IMÁGENES --- *@
                             else if ((MessageKind)m.MessageKind == MessageKind.Image && m.Id > 0)
                             {
-                                <img src="/api/webhook/evolution/download/@m.Id" class="msg-thumb" loading="lazy" />
+                                <img src="/api/webhook/evolution/download/@m.Id"
+                                     style="object-fit: contain; pointer-events: none;"
+                                class="msg-thumb" loading="lazy" />
                             }
-                            @* 2. Fallback: Medias por URL directa (Solo si no es sticker/imagen ya procesada) *@
-                            else if (!string.IsNullOrWhiteSpace(m.MediaUrl))
+
+                            @* --- 3. VIDEO --- *@
+                            else if ((MessageKind)m.MessageKind == MessageKind.Video)
                             {
                                 <div class="msg-media">
-                                    @if (IsImage(m.MediaMime))
-                                    {
-                                        <a href="@m.MediaUrl" target="_blank">
-                                            <img src="@m.MediaUrl" class="msg-thumb" loading="lazy" />
-                                        </a>
-                                    }
-                                    else
-                                    {
-                                        <a href="@m.MediaUrl" target="_blank" class="msg-attach-chip">
-                                            <span class="msg-attach-icon">📎</span>
-                                            <span class="msg-attach-name">Archivo Adjunto</span>
-                                        </a>
-                                    }
+                                    <video controls class="msg-video" style="max-width: 300px; border-radius: 8px;">
+                                        <source src="/api/webhook/evolution/download/@m.Id" type="@(m.MediaMime ?? "video/mp4")">
+                                        Tu navegador no soporta videos.
+                                    </video>
                                 </div>
                             }
 
-                            @* 3. Texto del mensaje *@
+                            @* --- 4. AUDIO / NOTAS DE VOZ --- *@
+                            else if ((MessageKind)m.MessageKind == MessageKind.Audio)
+                            {
+                                <div class="msg-media msg-audio-container">
+                                    <audio controls preload="metadata" style="height: 40px; width: 240px;">
+                                        <source src="/api/webhook/evolution/download/@m.Id" type="@(m.MediaMime ?? "audio/ogg")">
+                                    </audio>
+                                </div>
+                            }
+
+                            @* --- 5. DOCUMENTOS (PDF, DOCX, ETC) --- *@
+                            else if ((MessageKind)m.MessageKind == MessageKind.Document)
+                            {
+                                <div class="msg-media">
+                                    <a href="/api/webhook/evolution/download/@m.Id"
+                                       target="_blank"
+                                       class="msg-attach-chip"
+                                       download="@(m.MediaCaption ?? "archivo")">
+
+                                        <span class="msg-attach-icon">@(m.MediaMime?.Contains("pdf") == true ? "📄" : "📎")</span>
+                                        <div class="msg-attach-info">
+                                            <span class="msg-attach-name">@(string.IsNullOrEmpty(m.MediaCaption) ? "Documento" : m.MediaCaption)</span>
+                                            <small class="msg-attach-size">Click para descargar</small>
+                                        </div>
+                                    </a>
+                                </div>
+                            }
+
+                            @* --- 6. FALLBACK PARA CUALQUIER OTRO MEDIA --- *@
+                            else if (!string.IsNullOrWhiteSpace(m.MediaUrl) && m.Id > 0)
+                            {
+                                <div class="msg-media">
+                                    <a href="/api/webhook/evolution/download/@m.Id" target="_blank" class="msg-attach-chip">
+                                        <span class="msg-attach-icon">📎</span>
+                                        <span class="msg-attach-name">Archivo Adjunto</span>
+                                    </a>
+                                </div>
+                            }
+
+                            @* --- BLOQUE DE TEXTO (Caption o Mensaje simple) --- *@
                             @if (!string.IsNullOrWhiteSpace(m.Text))
                             {
                                 <div class="msg-text">@m.Text</div>
                             }
 
+                            @* --- REACCIONES --- *@
                             @if (!string.IsNullOrEmpty(m.Reaction))
                             {
                                 <div class="msg-reaction-badge">

@@ -24,12 +24,12 @@ namespace crmchapultepec.data.Repositories.EvolutionWebhook
         // =====================================
         // Obtener un registro por Id
         // =====================================
-        public async Task<CrmMessageMedia?> GetByIdAsync(int id, CancellationToken ct = default)
+        public async Task<CrmMessageMedia?> GetByIdAsync(int messageId, CancellationToken ct = default)
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
             return await db.CrmMessageMedias
-                .FirstOrDefaultAsync(m => m.Id == id);
+                .FirstOrDefaultAsync(m => m.MessageId == messageId);
         }
 
         public async Task<List<CrmMessageMedia>> GetAllAsync(CancellationToken ct = default)
