@@ -101,13 +101,20 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 "image" or "imagemessage" => "image/jpeg", //  Añadido imagemessage
                 "sticker" or "stickermessage" => "image/webp",
                 "document" or "documentmessage" => "application/pdf",
-                "audio" or "audiomessage" => "audio/mpeg",
+                "audio" or "audiomessage" => "audio/ogg", // Importante para notas de voz
+                "video" or "videomessage" => "video/mp4",
                 _ => "image/jpeg" // Fallback a imagen si es desconocido para intentar renderizar
             };
 
             // Si es imagen o sticker, lo enviamos SIN el nombre del archivo 
             // para que el navegador lo renderice en el <img>
             if (media.MediaType == "image" || media.MediaType == "sticker")
+            {
+                return File(bytes, mime);
+            }
+
+            // Si es Audio o Video, no forzamos descarga con nombre, permitimos streaming en el navegador
+            if (mime.StartsWith("audio/") || mime.StartsWith("video/") || mime.StartsWith("image/"))
             {
                 return File(bytes, mime);
             }
@@ -747,18 +754,50 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
                     case "audioMessage":
                         {
-                            messageKind = MessageKind.Audio;
+                            messageKind = MessageKind.Audio; // Asegúrate que tu Enum MessageKind tenga Audio
                             mediaType = "audio";
-                            var aud = message.GetProperty("audioMessage");
-                            mediaUrl = aud.GetProperty("url").GetString();
-                            mediaMime = aud.GetProperty("mimetype").GetString();
-                            mediaKey = aud.GetProperty("mediaKey").GetString();
-                            fileSha256 = aud.GetProperty("fileSha256").GetString();
-                            fileEncSha256 = aud.GetProperty("fileEncSha256").GetString();
-                            directPath = aud.GetProperty("directPath").GetString();
-                            mediaKeyTimestamp = aud.TryGetProperty("mediaKeyTimestamp", out var mts) ? mts.GetInt64() : null;
-                            fileLength = aud.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : null;
-                            textPreview = "[Audio]";
+
+                            // Acceder al nodo audioMessage
+                            if (!message.TryGetProperty("audioMessage", out var aud)) return null;
+
+                            var rawUrl = aud.TryGetProperty("url", out var urlProp) ? urlProp.GetString() : null;
+                            var dPath = aud.TryGetProperty("directPath", out var dpProp) ? dpProp.GetString() : null;
+
+                            if ((string.IsNullOrEmpty(rawUrl) || rawUrl.Contains("web.whatsapp.net")) && !string.IsNullOrEmpty(dPath))
+                                mediaUrl = $"https://mmg.whatsapp.net{dPath}";
+                            else
+                                mediaUrl = rawUrl;
+
+                            mediaMime = aud.TryGetProperty("mimetype", out var mime) ? mime.GetString() : "audio/ogg; codecs=opus";
+                            mediaKey = aud.TryGetProperty("mediaKey", out var mk) ? mk.GetString() : null;
+                            fileSha256 = aud.TryGetProperty("fileSha256", out var fsh) ? fsh.GetString() : null;
+                            fileEncSha256 = aud.TryGetProperty("fileEncSha256", out var feh) ? feh.GetString() : null;
+                            directPath = dPath;
+
+                            if (aud.TryGetProperty("fileLength", out var fl))
+                                fileLength = fl.ValueKind == JsonValueKind.Number ? fl.GetInt64() : (long.TryParse(fl.GetString(), out var len) ? len : 0);
+
+                            textPreview = "🎤 Nota de voz";
+                            break;
+                        }
+
+                    case "videoMessage":
+                        {
+                            messageKind = MessageKind.Video;
+                            mediaType = "video";
+                            if (!message.TryGetProperty("videoMessage", out var vid)) return null;
+
+                            var dPath = vid.TryGetProperty("directPath", out var dpProp) ? dpProp.GetString() : null;
+                            mediaUrl = !string.IsNullOrEmpty(dPath) ? $"https://mmg.whatsapp.net{dPath}" : (vid.TryGetProperty("url", out var urlProp) ? urlProp.GetString() : null);
+
+                            mediaMime = vid.TryGetProperty("mimetype", out var mime) ? mime.GetString() : "video/mp4";
+                            mediaKey = vid.TryGetProperty("mediaKey", out var mk) ? mk.GetString() : null;
+                            mediaCaption = vid.TryGetProperty("caption", out var cap) ? cap.GetString() : null;
+                            fileEncSha256 = vid.TryGetProperty("fileEncSha256", out var feh) ? feh.GetString() : null;
+                            directPath = dPath;
+
+                            textPreview = !string.IsNullOrEmpty(mediaCaption) ? $"🎥 {mediaCaption}" : "🎥 Video";
+                            text = mediaCaption;
                             break;
                         }
 
