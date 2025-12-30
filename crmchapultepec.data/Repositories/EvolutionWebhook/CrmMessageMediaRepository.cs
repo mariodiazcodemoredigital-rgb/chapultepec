@@ -41,47 +41,87 @@ namespace crmchapultepec.data.Repositories.EvolutionWebhook
                 .ToListAsync(ct);
         }
 
-        public async Task<byte[]?> GetDecryptedDocumentAsync(CrmMessageMedia media, CancellationToken ct = default)
-        {
-            if (media == null || string.IsNullOrEmpty(media.MediaUrl) || string.IsNullOrEmpty(media.MediaKey))
-                return null;
+        //public async Task<byte[]?> GetDecryptedDocumentAsync(CrmMessageMedia media, CancellationToken ct = default)
+        //{
+        //    if (media == null || string.IsNullOrEmpty(media.MediaUrl) || string.IsNullOrEmpty(media.MediaKey))
+        //        return null;
 
-            // 1. Descargar archivo .enc
-            var encryptedBytes = await _httpClient.GetByteArrayAsync(media.MediaUrl, ct);
+        //    // 1. Descargar archivo .enc
+        //    var encryptedBytes = await _httpClient.GetByteArrayAsync(media.MediaUrl, ct);
 
-            // 2. Desencriptar usando tu método de WhatsApp (ejemplo)
-            var decryptedBytes = WhatsAppDecrypt(encryptedBytes, media.MediaKey);
+        //    // 2. Desencriptar usando tu método de WhatsApp (ejemplo)
+        //    var decryptedBytes = WhatsAppDecrypt(encryptedBytes, media.MediaKey);
 
-            return decryptedBytes;
-        }
+        //    return decryptedBytes;
+        //}
 
-        // Aquí va tu método real de desencriptado (simplificado)
-        private byte[] WhatsAppDecrypt(byte[] data, string mediaKey)
-        {
-            // Lógica de desencriptado basada en mediaKey
-            // Por ahora simulamos retornando el mismo array
-            return data;
-        }
+        //// Aquí va tu método real de desencriptado (simplificado)
+        //private byte[] WhatsAppDecrypt(byte[] data, string mediaKey)
+        //{
+        //    // Lógica de desencriptado basada en mediaKey
+        //    // Por ahora simulamos retornando el mismo array
+        //    return data;
+        //}
 
         // =====================================
         // Desencriptar media directamente en memoria
         // =====================================
         public async Task<byte[]?> DecryptMediaAsync(CrmMessageMedia media, CancellationToken ct = default)
         {
-            if (media == null || string.IsNullOrEmpty(media.MediaUrl) || string.IsNullOrEmpty(media.MediaKey))
+            if (media == null || string.IsNullOrEmpty(media.MediaKey))
                 return null;
 
-            // 1️⃣ Descargar el archivo .enc desde MediaUrl
-            var encrypted = await _httpClient.GetByteArrayAsync(media.MediaUrl, ct);
+            // 1. Determinar la URL con mayor probabilidad de éxito
+            // Si tenemos DirectPath, es preferible construirla desde mmg.whatsapp.net
+            string urlToDownload = media.MediaUrl;
+            if (!string.IsNullOrWhiteSpace(media.DirectPath))
+            {
+                urlToDownload = $"https://mmg.whatsapp.net{media.DirectPath}";
+            }
 
-            // 2️⃣ Desencriptar usando la mediaKey
-            //var decryptedBytes = WhatsAppDecrypt(encryptedBytes, media.MediaKey);
+            if (string.IsNullOrEmpty(urlToDownload)) return null;
 
-            return DecryptWhatsAppMedia(
-                encrypted,
-                media.MediaKey,
-                media.MediaType
-            );
+            try
+            {
+                // 2. Configurar headers para simular navegador (evita Forbidden)
+                _httpClient.DefaultRequestHeaders.Clear();
+                _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+                // 3. Descarga con validación de respuesta
+                using var response = await _httpClient.GetAsync(urlToDownload, HttpCompletionOption.ResponseHeadersRead, ct);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Si falló con el DirectPath, y la MediaUrl es diferente, intentamos el fallback a MediaUrl
+                    if (urlToDownload != media.MediaUrl && !string.IsNullOrEmpty(media.MediaUrl))
+                    {
+                        Console.WriteLine("DirectPath falló, intentando MediaUrl original...");
+                        return await DecryptMediaAsync(new CrmMessageMedia
+                        {
+                            MediaUrl = media.MediaUrl,
+                            MediaKey = media.MediaKey,
+                            MediaType = media.MediaType
+                        }, ct);
+                    }
+
+                    Console.WriteLine($"WhatsApp rechazó la descarga: {response.StatusCode}");
+                    return null;
+                }
+
+                var encrypted = await response.Content.ReadAsByteArrayAsync(ct);
+
+                // 4. Desencriptar
+                return DecryptWhatsAppMedia(
+                    encrypted,
+                    media.MediaKey,
+                    media.MediaType
+                );
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error crítico en DecryptMediaAsync: {ex.Message}");
+                return null;
+            }
         }
 
         static byte[] HKDF(byte[] ikm, byte[] info, int length)
@@ -110,9 +150,9 @@ namespace crmchapultepec.data.Repositories.EvolutionWebhook
         }
 
         public byte[] DecryptWhatsAppMedia(
-    byte[] encrypted,
-    string mediaKeyBase64,
-    string mediaType)
+        byte[] encrypted,
+        string mediaKeyBase64,
+        string mediaType)
         {
             var mediaKey = Convert.FromBase64String(mediaKeyBase64);
 
@@ -173,81 +213,6 @@ namespace crmchapultepec.data.Repositories.EvolutionWebhook
         }
 
 
-
-        //public static byte[] HkdfSha256(byte[] key, byte[] info, int length)
-        //{
-        //    using var hmac = new HMACSHA256(key);
-        //    var hashLen = 32;
-        //    var blocks = (int)Math.Ceiling((double)length / hashLen);
-
-        //    var okm = new byte[length];
-        //    var previous = Array.Empty<byte>();
-        //    var offset = 0;
-
-        //    for (var i = 1; i <= blocks; i++)
-        //    {
-        //        var data = previous
-        //            .Concat(info)
-        //            .Concat(new[] { (byte)i })
-        //            .ToArray();
-
-        //        previous = hmac.ComputeHash(data);
-
-        //        var toCopy = Math.Min(hashLen, length - offset);
-        //        Array.Copy(previous, 0, okm, offset, toCopy);
-        //        offset += toCopy;
-        //    }
-
-        //    return okm;
-        //}
-
-
-        //public byte[] DecryptWhatsAppMedia(
-        //        byte[] encrypted,
-        //        string mediaKeyBase64,
-        //        string mediaType)
-        //{
-        //    var mediaKey = Convert.FromBase64String(mediaKeyBase64);
-
-        //    var normalizedType = mediaType switch
-        //    {
-        //        "imageMessage" => "image",
-        //        "videoMessage" => "video",
-        //        "audioMessage" => "audio",
-        //        "documentMessage" => "document",
-        //        "stickerMessage" => "sticker",
-        //        _ => mediaType
-        //    };
-
-        //    var info = normalizedType switch
-        //    {
-        //        "image" => Encoding.UTF8.GetBytes("WhatsApp Image Keys"),
-        //        "video" => Encoding.UTF8.GetBytes("WhatsApp Video Keys"),
-        //        "audio" => Encoding.UTF8.GetBytes("WhatsApp Audio Keys"),
-        //        "document" => Encoding.UTF8.GetBytes("WhatsApp Document Keys"),
-        //        "sticker" => Encoding.UTF8.GetBytes("WhatsApp Image Keys"),
-        //        _ => throw new Exception($"Unsupported media type: {mediaType}")
-        //    };
-
-
-        //    var expandedKey = HkdfSha256(mediaKey, info, 112);
-
-        //    var iv = expandedKey[..16];
-        //    var aesKey = expandedKey[16..48];
-
-        //    // El último bloque es MAC (32 bytes)
-        //    var cipherText = encrypted[..(encrypted.Length - 32)];
-
-        //    using var aes = Aes.Create();
-        //    aes.KeySize = 256;
-        //    aes.Mode = CipherMode.CBC;
-        //    aes.Padding = PaddingMode.PKCS7;
-        //    aes.Key = aesKey;
-        //    aes.IV = iv;
-
-        //    using var decryptor = aes.CreateDecryptor();
-        //    return decryptor.TransformFinalBlock(cipherText, 0, cipherText.Length);
-        //}
 
     }
 }

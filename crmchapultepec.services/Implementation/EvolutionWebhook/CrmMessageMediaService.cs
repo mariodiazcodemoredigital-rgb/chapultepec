@@ -28,8 +28,8 @@ namespace crmchapultepec.services.Implementation.EvolutionWebhook
             return await _rmMessageMediaRepository.GetAllAsync(ct);
         }
 
-        public Task<byte[]?> GetDecryptedDocumentAsync(CrmMessageMedia media, CancellationToken ct = default)        
-             => _rmMessageMediaRepository.GetDecryptedDocumentAsync(media, ct);
+        //public Task<byte[]?> GetDecryptedDocumentAsync(CrmMessageMedia media, CancellationToken ct = default)        
+        //     => _rmMessageMediaRepository.GetDecryptedDocumentAsync(media, ct);
 
         public Task<byte[]?> DecryptMedia(CrmMessageMedia media, CancellationToken ct = default)
         {

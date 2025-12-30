@@ -12,7 +12,7 @@ namespace crmchapultepec.services.Interfaces.EvolutionWebhook
         Task<CrmMessageMedia?> GetByIdAsync(int id, CancellationToken ct = default);
         Task<CrmMessageMedia?> GetByMessageIdAsync(int messageId, CancellationToken ct = default);
         Task<List<CrmMessageMedia>> GetAllAsync(CancellationToken ct = default);
-        Task<byte[]?> GetDecryptedDocumentAsync(CrmMessageMedia media, CancellationToken ct = default);
+        //Task<byte[]?> GetDecryptedDocumentAsync(CrmMessageMedia media, CancellationToken ct = default);
         Task<byte[]?> DecryptMedia(CrmMessageMedia media, CancellationToken ct = default);
     }
 }
