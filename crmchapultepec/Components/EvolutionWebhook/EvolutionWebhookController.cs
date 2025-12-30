@@ -755,12 +755,22 @@ namespace crmchapultepec.Components.EvolutionWebhook
                             mediaType = "audio";
 
                             // Acceder al nodo audioMessage
-                            if (!message.TryGetProperty("audioMessage", out var aud)) return null;
+                            // Intentamos obtener el nodo de audio de forma segura
+                            // A veces viene dentro de 'message', a veces 'message' es el objeto directamente
+                            JsonElement aud;
+                            if (message.TryGetProperty("audioMessage", out var audNode))
+                            {
+                                aud = audNode;
+                            }
+                            else
+                            {
+                                aud = message;
+                            }
 
                             var rawUrl = aud.TryGetProperty("url", out var urlProp) ? urlProp.GetString() : null;
                             var dPath = aud.TryGetProperty("directPath", out var dpProp) ? dpProp.GetString() : null;
 
-                            if ((string.IsNullOrEmpty(rawUrl) || rawUrl.Contains("web.whatsapp.net")) && !string.IsNullOrEmpty(dPath))
+                            if (!string.IsNullOrEmpty(dPath) && (!rawUrl?.Contains("mmg") ?? true))
                                 mediaUrl = $"https://mmg.whatsapp.net{dPath}";
                             else
                                 mediaUrl = rawUrl;
