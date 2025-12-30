@@ -46,9 +46,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
             _inboundToken = cfg["Evolution:WebhookInboundToken"];  // opcional
             _ipWhitelist = (cfg["Evolution:WebhookIpWhitelist"] ?? "")
                             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        }
-
-        
+        }        
 
         [HttpGet("all")]
         public async Task<IActionResult> GetAll(CancellationToken ct)
@@ -131,10 +129,9 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
         [HttpPost]
         public async Task<IActionResult> Post([FromServices] IWebhookControlService toggle, CancellationToken ct)
-        {
-          
+        {          
 
-            // 🔴 Switch General para apagar los insert de Evolution API
+            //  Switch General para apagar los insert de Evolution API
             if (!await toggle.IsEvolutionEnabledAsync(ct))
             {
                 _log.LogWarning("Evolution webhook recibido pero DESACTIVADO");
