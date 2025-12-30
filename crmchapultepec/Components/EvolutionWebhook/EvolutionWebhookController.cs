@@ -560,7 +560,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
 
                 var remoteJid = rj.GetString()!;
 
-                // 🚩 EXTRAER senderPn PARA VALIDACIÓN DE LID
+                //  EXTRAER senderPn PARA VALIDACIÓN DE LID
                 string? senderPn = key.TryGetProperty("senderPn", out var spn) ? spn.GetString() : null;
 
                 var fromMe = key.TryGetProperty("fromMe", out var fm) && fm.GetBoolean();
@@ -570,7 +570,7 @@ namespace crmchapultepec.Components.EvolutionWebhook
                 if (data.TryGetProperty("pushName", out var pn))
                     pushName = pn.GetString();
 
-                // 🚩 DETECCIÓN AVANZADA DE ORIGEN (Prospecto vs Contacto LID)
+                //  DETECCIÓN AVANZADA DE ORIGEN (Prospecto vs Contacto LID)
                 bool isFromAd = false;
                 if (data.TryGetProperty("contextInfo", out var context))
                 {
@@ -583,8 +583,8 @@ namespace crmchapultepec.Components.EvolutionWebhook
                         isFromAd = true;
                 }
 
-                // 🚩 LÓGICA DE EXTRACCIÓN DE NÚMERO (Validación @s.whatsapp.net)
-                // 🚩 LÓGICA DE IDENTIDAD (UNIFICADA)
+                //  LÓGICA DE EXTRACCIÓN DE NÚMERO (Validación @s.whatsapp.net)
+                //  LÓGICA DE IDENTIDAD (UNIFICADA)
                 string? finalPhone = null;
                 string? finalLid = null;
 
@@ -778,20 +778,36 @@ namespace crmchapultepec.Components.EvolutionWebhook
                             break;
                         }
 
+                    
+
                     case "videoMessage":
                         {
-                            messageKind = MessageKind.Video;
+                            messageKind = MessageKind.Video; // Asegúrate de tener 'Video' en tu Enum MessageKind
                             mediaType = "video";
+
                             if (!message.TryGetProperty("videoMessage", out var vid)) return null;
 
+                            // Extraer URL (Prioridad al DirectPath para evitar expiración)
+                            var rawUrl = vid.TryGetProperty("url", out var urlProp) ? urlProp.GetString() : null;
                             var dPath = vid.TryGetProperty("directPath", out var dpProp) ? dpProp.GetString() : null;
-                            mediaUrl = !string.IsNullOrEmpty(dPath) ? $"https://mmg.whatsapp.net{dPath}" : (vid.TryGetProperty("url", out var urlProp) ? urlProp.GetString() : null);
 
+                            if (!string.IsNullOrEmpty(dPath))
+                                mediaUrl = $"https://mmg.whatsapp.net{dPath}";
+                            else
+                                mediaUrl = rawUrl;
+
+                            // Metadatos cruciales
                             mediaMime = vid.TryGetProperty("mimetype", out var mime) ? mime.GetString() : "video/mp4";
                             mediaKey = vid.TryGetProperty("mediaKey", out var mk) ? mk.GetString() : null;
-                            mediaCaption = vid.TryGetProperty("caption", out var cap) ? cap.GetString() : null;
+                            fileSha256 = vid.TryGetProperty("fileSha256", out var fsh) ? fsh.GetString() : null;
                             fileEncSha256 = vid.TryGetProperty("fileEncSha256", out var feh) ? feh.GetString() : null;
                             directPath = dPath;
+
+                            // Caption del video
+                            mediaCaption = vid.TryGetProperty("caption", out var cap) ? cap.GetString() : null;
+
+                            if (vid.TryGetProperty("fileLength", out var fl))
+                                fileLength = fl.ValueKind == JsonValueKind.Number ? fl.GetInt64() : 0;
 
                             textPreview = !string.IsNullOrEmpty(mediaCaption) ? $"🎥 {mediaCaption}" : "🎥 Video";
                             text = mediaCaption;
