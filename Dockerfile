@@ -13,18 +13,19 @@ COPY crmchapultepec/*.csproj ./crmchapultepec/
 COPY crmchapultepec.data/*.csproj ./crmchapultepec.data/
 COPY crmchapultepec.services/*.csproj ./crmchapultepec.services/
 COPY crmchapultepec.entities/*.csproj ./crmchapultepec.entities/
-COPY crmchapultepec.entities/ ./crmchapultepec.entities/
+
 
 # Restaurar paquetes
 RUN dotnet restore
 
 # Copiar todo el código
-COPY crmchapultepec/ ./crmchapultepec/
+COPY crmchapultepec.entities/ ./crmchapultepec.entities/
 COPY crmchapultepec.data/ ./crmchapultepec.data/
 COPY crmchapultepec.services/ ./crmchapultepec.services/
+COPY crmchapultepec/ ./crmchapultepec/
 
 # Publicar en modo Release
-RUN dotnet publish crmchapultepec/crmchapultepec.csproj -c Release -o /app/publish
+RUN dotnet publish crmchapultepec/crmchapultepec.csproj -c Release -o /app/publish --no-restore
 
 # 3. Imagen final
 FROM base AS final
